@@ -376,6 +376,28 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
             </div>
           </div>
 
+          {/* Quick Collection Add Banner */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-amber-300" />
+                <h3 className="font-black text-sm sm:text-base text-white">
+                  このカードをバインダーに収納
+                </h3>
+              </div>
+              <p className="text-xs text-rose-100 font-medium">
+                AIが綺麗に枠を切り抜いたカード画像をスリーブにファイリングして大切に管理
+              </p>
+            </div>
+            <button
+              onClick={() => setIsAddToBinderOpen(true)}
+              className="px-5 py-3 rounded-xl bg-white text-red-600 hover:bg-rose-50 text-xs sm:text-sm font-black shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer shrink-0"
+            >
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <span>バインダーに収納する</span>
+            </button>
+          </div>
+
           {/* Detailed Price Breakdown Table */}
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
             <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">

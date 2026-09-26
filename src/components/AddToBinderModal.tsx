@@ -61,8 +61,7 @@ export const AddToBinderModal: React.FC<AddToBinderModalProps> = ({
   };
 
   const handleAdd = () => {
-    if (!selectedBinderId && binders.length === 0) return;
-    const targetId = selectedBinderId || binders[0]?.id;
+    const targetId = selectedBinderId || binders[0]?.id || 'binder_main_collection';
 
     const res = addCardToBinder(
       targetId,
@@ -74,12 +73,12 @@ export const AddToBinderModal: React.FC<AddToBinderModalProps> = ({
 
     playSleeveInsertSound();
     playHoloShimmerSound();
+    onSuccess(res.binder);
 
     setIsSuccessAnim(true);
     setTimeout(() => {
-      onSuccess(res.binder);
       onClose();
-    }, 900);
+    }, 600);
   };
 
   return (

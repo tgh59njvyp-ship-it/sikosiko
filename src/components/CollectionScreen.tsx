@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   BookOpen,
   Sparkles,
@@ -10,24 +10,19 @@ import {
   Layers,
   Search,
   Trash2,
-  ExternalLink,
-  RotateCw,
   Share2,
   CheckCircle2,
-  Settings,
   Grid,
   Camera,
-  Maximize2,
   ArrowRight,
   X,
-  SlidersHorizontal,
+  ExternalLink,
 } from 'lucide-react';
 import {
   CollectionBinder,
   BinderSlotCard,
   BinderCoverColor,
   getStoredBinders,
-  saveStoredBinders,
   getActiveBinderId,
   setActiveBinderId,
   createNewBinder,
@@ -35,10 +30,10 @@ import {
   updateBinder,
   removeCardFromBinder,
   getCollectionAnalytics,
+  COLLECTION_UPDATED_EVENT,
 } from '../lib/collectionStorage';
 import {
   playPageFlipSound,
-  playSleeveInsertSound,
   playHoloShimmerSound,
   playBinderOpenSound,
 } from '../lib/soundFx';
@@ -50,12 +45,11 @@ interface CollectionScreenProps {
 
 export const CollectionScreen: React.FC<CollectionScreenProps> = ({
   onOpenScan,
-  onSelectCardDetail,
 }) => {
   const [binders, setBinders] = useState<CollectionBinder[]>([]);
   const [activeBinderId, setCurrentActiveId] = useState<string>('');
   const [isBookOpen, setIsBookOpen] = useState<boolean>(true);
-  const [currentPageSpread, setCurrentPageSpread] = useState<number>(0); // 0 = page 0 & 1, 1 = page 2 & 3
+  const [currentPageSpread, setCurrentPageSpread] = useState<number>(0);
   const [viewMode, setViewMode] = useState<'book' | 'grid'>('book');
   const [selectedCardForModal, setSelectedCardForModal] = useState<BinderSlotCard | null>(null);
   const [isCreateBinderModalOpen, setIsCreateBinderModalOpen] = useState<boolean>(false);
@@ -66,14 +60,30 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
   const [rarityFilter, setRarityFilter] = useState<string>('all');
   const [copiedNotification, setCopiedNotification] = useState<boolean>(false);
 
-  // Load binders on mount
-  useEffect(() => {
+  // Sync state from storage
+  const syncBindersFromStorage = useCallback(() => {
     const loaded = getStoredBinders();
     setBinders(loaded);
     const activeId = getActiveBinderId();
     const match = loaded.find((b) => b.id === activeId);
     setCurrentActiveId(match ? match.id : loaded[0]?.id || '');
   }, []);
+
+  useEffect(() => {
+    syncBindersFromStorage();
+
+    const handleStorageUpdate = () => {
+      syncBindersFromStorage();
+    };
+
+    window.addEventListener(COLLECTION_UPDATED_EVENT, handleStorageUpdate);
+    window.addEventListener('storage', handleStorageUpdate);
+
+    return () => {
+      window.removeEventListener(COLLECTION_UPDATED_EVENT, handleStorageUpdate);
+      window.removeEventListener('storage', handleStorageUpdate);
+    };
+  }, [syncBindersFromStorage]);
 
   const activeBinder = binders.find((b) => b.id === activeBinderId) || binders[0];
   const analytics = getCollectionAnalytics(binders);
@@ -107,8 +117,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
   const handleCreateNewBinder = () => {
     if (!newBinderTitle.trim()) return;
     const created = createNewBinder(newBinderTitle.trim(), '', newBinderColor, 'pokeball');
-    const updated = getStoredBinders();
-    setBinders(updated);
+    syncBindersFromStorage();
     setCurrentActiveId(created.id);
     setActiveBinderId(created.id);
     setIsCreateBinderModalOpen(false);
@@ -120,28 +129,22 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
     if (binders.length <= 1) return;
     if (confirm('このバインダーを削除してもよろしいですか？')) {
       deleteBinder(id);
-      const updated = getStoredBinders();
-      setBinders(updated);
-      setCurrentActiveId(updated[0]?.id || '');
+      syncBindersFromStorage();
     }
   };
 
   const handleRemoveCard = (slotCardId: string) => {
     if (!activeBinder) return;
-    const updated = removeCardFromBinder(activeBinder.id, slotCardId);
-    if (updated) {
-      const allBinders = getStoredBinders();
-      setBinders(allBinders);
-      setSelectedCardForModal(null);
-    }
+    removeCardFromBinder(activeBinder.id, slotCardId);
+    syncBindersFromStorage();
+    setSelectedCardForModal(null);
   };
 
   const handleAddPage = () => {
     if (!activeBinder) return;
     const newTotal = activeBinder.totalPages + 2;
     updateBinder(activeBinder.id, { totalPages: newTotal });
-    const updated = getStoredBinders();
-    setBinders(updated);
+    syncBindersFromStorage();
     playPageFlipSound();
   };
 
@@ -171,42 +174,42 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
     switch (color) {
       case 'obsidian':
         return {
-          leather: 'from-slate-900 via-zinc-900 to-black text-slate-100 border-slate-700',
+          leather: 'from-slate-900 via-zinc-900 to-black text-slate-100 border-slate-700 shadow-slate-900/50',
           spine: 'bg-zinc-950 border-zinc-700 text-amber-400',
           accent: 'text-amber-400 border-amber-500/40 bg-amber-500/10',
           badge: 'bg-zinc-800 text-zinc-200 border-zinc-700',
         };
       case 'sapphire':
         return {
-          leather: 'from-blue-950 via-indigo-900 to-slate-950 text-blue-50 border-blue-800',
+          leather: 'from-blue-950 via-indigo-900 to-slate-950 text-blue-50 border-blue-800 shadow-blue-950/50',
           spine: 'bg-blue-950 border-blue-700 text-cyan-300',
           accent: 'text-cyan-400 border-cyan-500/40 bg-cyan-500/10',
           badge: 'bg-blue-900 text-blue-200 border-blue-700',
         };
       case 'emerald':
         return {
-          leather: 'from-emerald-950 via-teal-900 to-slate-950 text-emerald-50 border-emerald-800',
+          leather: 'from-emerald-950 via-teal-900 to-slate-950 text-emerald-50 border-emerald-800 shadow-emerald-950/50',
           spine: 'bg-emerald-950 border-emerald-700 text-emerald-300',
           accent: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10',
           badge: 'bg-emerald-900 text-emerald-200 border-emerald-700',
         };
       case 'amber':
         return {
-          leather: 'from-amber-950 via-yellow-900 to-stone-950 text-amber-50 border-amber-800',
+          leather: 'from-amber-950 via-yellow-900 to-stone-950 text-amber-50 border-amber-800 shadow-amber-950/50',
           spine: 'bg-stone-950 border-amber-700 text-amber-300',
           accent: 'text-amber-400 border-amber-500/40 bg-amber-500/10',
           badge: 'bg-amber-900 text-amber-200 border-amber-700',
         };
       case 'amethyst':
         return {
-          leather: 'from-purple-950 via-fuchsia-950 to-slate-950 text-purple-50 border-purple-800',
+          leather: 'from-purple-950 via-fuchsia-950 to-slate-950 text-purple-50 border-purple-800 shadow-purple-950/50',
           spine: 'bg-purple-950 border-purple-700 text-fuchsia-300',
           accent: 'text-fuchsia-400 border-fuchsia-500/40 bg-fuchsia-500/10',
           badge: 'bg-purple-900 text-purple-200 border-purple-700',
         };
       default: // crimson
         return {
-          leather: 'from-red-950 via-rose-950 to-neutral-950 text-red-50 border-red-800',
+          leather: 'from-red-950 via-rose-950 to-neutral-950 text-red-50 border-red-800 shadow-red-950/50',
           spine: 'bg-neutral-950 border-red-700 text-red-400',
           accent: 'text-red-400 border-red-500/40 bg-red-500/10',
           badge: 'bg-red-900/80 text-red-200 border-red-700',
@@ -232,33 +235,35 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
   const leftPageIndex = currentPageSpread * 2;
   const rightPageIndex = currentPageSpread * 2 + 1;
 
-  const leftPageCards = activeBinder?.cards.filter((c) => c.pageIndex === leftPageIndex) || [];
-  const rightPageCards = activeBinder?.cards.filter((c) => c.pageIndex === rightPageIndex) || [];
+  const leftPageCards = activeBinder?.cards?.filter((c) => c.pageIndex === leftPageIndex) || [];
+  const rightPageCards = activeBinder?.cards?.filter((c) => c.pageIndex === rightPageIndex) || [];
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8 pb-28 md:pb-16">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8 pb-28 md:pb-16 animate-fadeIn">
       
       {/* 1. Header & Portfolio Value Statistics Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="p-1.5 rounded-lg bg-red-100 dark:bg-red-950/70 text-red-600 dark:text-rose-400">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-gradient-to-tr from-red-600 to-rose-600 text-white shadow-md shadow-red-500/20">
               <BookOpen className="w-5 h-5" />
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-              カードコレクション バインダー
-            </h1>
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                カードコレクション バインダー
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 font-medium">
+                本を開くように直感的に鑑賞・管理できる9ポケット公式カードアルバム
+              </p>
+            </div>
           </div>
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-            本を開くようにスムーズに鑑賞・管理できる9ポケット公式カードアルバム
-          </p>
         </div>
 
         {/* Global Action CTAs */}
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => setIsCreateBinderModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 transition-colors shadow-xs"
           >
             <Plus className="w-4 h-4" />
             <span>新規バインダー</span>
@@ -266,7 +271,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
 
           <button
             onClick={onOpenScan}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white text-xs font-bold shadow-md shadow-red-500/25 active:scale-95 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-4 sm:px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white text-xs sm:text-sm font-bold shadow-lg shadow-red-500/25 active:scale-95 transition-all cursor-pointer"
           >
             <Camera className="w-4 h-4" />
             <span>カードを査定して追加</span>
@@ -274,57 +279,65 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
         </div>
       </div>
 
-      {/* 2. Portfolio Stats Bar */}
+      {/* 2. Portfolio High-Contrast Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Value */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
             <span>コレクション総推定額</span>
-            <TrendingUp className="w-4 h-4 text-emerald-500" />
+            <div className="p-1 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+              <TrendingUp className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+          <div className="text-2xl sm:text-3xl font-black text-red-600 dark:text-rose-400 tracking-tight font-mono">
             ¥{analytics.totalValue.toLocaleString()}
           </div>
-          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-1">
             全{binders.length}冊のバインダー合計
           </span>
         </div>
 
         {/* Total Cards in Binder */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
             <span>バインダー収納枚数</span>
-            <Layers className="w-4 h-4 text-blue-500" />
+            <div className="p-1 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+              <Layers className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-            {activeBinder?.cards.length || 0} <span className="text-sm font-bold text-slate-400">/ {((activeBinder?.totalPages || 4) * 9)} 枚</span>
+          <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+            {activeBinder?.cards?.length || 0} <span className="text-sm font-bold text-slate-400">/ {((activeBinder?.totalPages || 4) * 9)} 枚</span>
           </div>
           <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-1">
-            スロット充足率 {Math.round(((activeBinder?.cards.length || 0) / ((activeBinder?.totalPages || 4) * 9)) * 100)}%
+            スロット充足率 {Math.round(((activeBinder?.cards?.length || 0) / ((activeBinder?.totalPages || 4) * 9)) * 100)}%
           </span>
         </div>
 
         {/* Top Valued Card */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
             <span>最高額カード</span>
-            <Sparkles className="w-4 h-4 text-amber-500" />
+            <div className="p-1 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+              <Sparkles className="w-4 h-4" />
+            </div>
           </div>
           <div className="text-sm sm:text-base font-black text-slate-900 dark:text-white truncate">
-            {analytics.topCard ? analytics.topCard.cardName : '―'}
+            {analytics.topCard ? analytics.topCard.cardName : 'カード未収納'}
           </div>
-          <span className="text-xs text-red-600 dark:text-rose-400 font-bold mt-1">
+          <span className="text-xs text-red-600 dark:text-rose-400 font-bold mt-1 font-mono">
             {analytics.topCard ? `¥${analytics.topCard.estimatedPrice.toLocaleString()}` : '―'}
           </span>
         </div>
 
         {/* S-Grade Count */}
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
             <span>Sランク極美品</span>
-            <ShieldCheck className="w-4 h-4 text-amber-500" />
+            <div className="p-1 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-xl sm:text-2xl font-black text-amber-500 tracking-tight">
+          <div className="text-2xl sm:text-3xl font-black text-amber-500 tracking-tight">
             {analytics.gradeCounts['S'] || 0} <span className="text-xs text-slate-400 font-bold">枚</span>
           </div>
           <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-1">
@@ -334,10 +347,10 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
       </div>
 
       {/* 3. Binder Tabs & Controls Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-100/80 dark:bg-slate-800/60 p-2 rounded-2xl border border-slate-200/80 dark:border-slate-700/60">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         
         {/* Binder Selector Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
           {binders.map((b) => {
             const isActive = b.id === activeBinder?.id;
             return (
@@ -349,40 +362,43 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
                   setCurrentPageSpread(0);
                   playPageFlipSound();
                 }}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer ${
                   isActive
-                    ? 'bg-white dark:bg-slate-900 text-red-600 dark:text-rose-400 shadow-sm border border-slate-200 dark:border-slate-700'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-red-600 text-white shadow-md shadow-red-500/25'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
               >
                 <span>{b.title}</span>
-                <span className="px-1.5 py-0.2 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-500 font-mono">
-                  {b.cards.length}
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                    isActive ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                  }`}
+                >
+                  {b.cards?.length || 0}枚
                 </span>
               </button>
             );
           })}
         </div>
 
-        {/* View Mode & Actions */}
+        {/* View Mode & Share Actions */}
         <div className="flex items-center gap-2 self-end sm:self-auto">
-          {/* Share */}
           <button
             onClick={handleShareBinder}
             title="バインダーをシェア"
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <Share2 className="w-4 h-4" />
           </button>
 
           {/* Book / Grid Toggle */}
-          <div className="flex items-center bg-white dark:bg-slate-900 rounded-xl p-1 border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-1 border border-slate-200 dark:border-slate-700">
             <button
               onClick={() => setViewMode('book')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer ${
                 viewMode === 'book'
-                  ? 'bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-rose-400'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-white dark:bg-slate-900 text-red-600 dark:text-rose-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5" />
@@ -390,10 +406,10 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
             </button>
             <button
               onClick={() => setViewMode('grid')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer ${
                 viewMode === 'grid'
-                  ? 'bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-rose-400'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  ? 'bg-white dark:bg-slate-900 text-red-600 dark:text-rose-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Grid className="w-3.5 h-3.5" />
@@ -404,7 +420,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
       </div>
 
       {copiedNotification && (
-        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold rounded-2xl flex items-center gap-2">
+        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold rounded-2xl flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           <span>バインダー情報をクリップボードにコピーしました！</span>
         </div>
@@ -418,15 +434,15 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
           <div className="flex items-center justify-between">
             <button
               onClick={handleToggleBookOpen}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm"
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-black text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-sm cursor-pointer"
             >
-              <BookOpen className="w-4 h-4 text-red-500" />
+              <BookOpen className="w-4 h-4 text-red-600" />
               <span>{isBookOpen ? 'バインダー表紙を閉じる' : 'バインダーを開く'}</span>
             </button>
 
             {isBookOpen && (
-              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
+              <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 font-bold">
+                <span className="font-mono text-red-600 dark:text-rose-400 font-black">
                   Page {leftPageIndex + 1} - {rightPageIndex + 1}
                 </span>
                 <span>/ {activeBinder?.totalPages || 4} ページ</span>
@@ -440,19 +456,16 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
             className="perspective-1000 select-none"
           >
             {!isBookOpen ? (
-              /* CLOSED BINDER COVER (Realistic 3D Embossed Leather & Gold Corners) */
+              /* CLOSED BINDER COVER */
               <div
                 onClick={handleToggleBookOpen}
-                className={`relative mx-auto max-w-md aspect-[3/4] rounded-3xl p-8 shadow-2xl border-4 cursor-pointer group transition-all transform hover:scale-[1.01] hover:shadow-red-500/10 bg-gradient-to-br ${themeStyle.leather}`}
+                className={`relative mx-auto max-w-md aspect-[3/4] rounded-3xl p-8 shadow-2xl border-4 cursor-pointer group transition-all transform hover:scale-[1.01] hover:shadow-red-500/15 bg-gradient-to-br ${themeStyle.leather}`}
               >
                 {/* 3D Gold Corner Guards */}
                 <div className="absolute top-2 left-2 w-8 h-8 border-t-4 border-l-4 border-amber-400 rounded-tl-xl opacity-90"></div>
                 <div className="absolute top-2 right-2 w-8 h-8 border-t-4 border-r-4 border-amber-400 rounded-tr-xl opacity-90"></div>
                 <div className="absolute bottom-2 left-2 w-8 h-8 border-b-4 border-l-4 border-amber-400 rounded-bl-xl opacity-90"></div>
                 <div className="absolute bottom-2 right-2 w-8 h-8 border-b-4 border-r-4 border-amber-400 rounded-br-xl opacity-90"></div>
-
-                {/* Left Spine crease line */}
-                <div className="absolute top-0 bottom-0 left-6 w-1 bg-black/40 shadow-inner"></div>
 
                 <div className="h-full flex flex-col items-center justify-between text-center relative z-10 py-6">
                   {/* Top Crest */}
@@ -477,40 +490,57 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
 
                   {/* Footer Tag */}
                   <div className="space-y-3">
-                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/50 border border-amber-400/30 text-amber-300 text-xs font-bold">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>収納枚数 {activeBinder?.cards.length || 0}枚 / 総額 ¥{activeBinder?.cards.reduce((sum, c) => sum + c.estimatedPrice, 0).toLocaleString()}</span>
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-black/60 border border-amber-400/40 text-amber-300 text-xs font-black">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>収納 {activeBinder?.cards?.length || 0}枚 · 総額 ¥{activeBinder?.cards?.reduce((sum, c) => sum + c.estimatedPrice, 0).toLocaleString()}</span>
                     </div>
-                    <p className="text-[11px] text-amber-200/70 font-semibold flex items-center justify-center gap-1">
+                    <p className="text-xs text-amber-200/80 font-bold flex items-center justify-center gap-1.5">
                       <span>タップしてバインダーを開く</span>
-                      <ArrowRight className="w-3.5 h-3.5 animate-pulse" />
+                      <ArrowRight className="w-4 h-4 animate-pulse" />
                     </p>
                   </div>
                 </div>
               </div>
             ) : (
               /* OPENED BINDER SPREAD (2-Page Spread with Center Ring Binder Clamps & 9-Pocket Sleeves) */
-              <div className="relative rounded-3xl p-3 sm:p-6 lg:p-8 bg-gradient-to-b from-slate-900 via-neutral-900 to-slate-950 border-4 border-slate-800 shadow-2xl overflow-hidden">
+              <div className="relative rounded-3xl p-3 sm:p-6 lg:p-8 bg-slate-900 dark:bg-slate-950 border-4 border-slate-700 dark:border-slate-800 shadow-2xl overflow-hidden">
                 
-                {/* Center 3-Ring Binder Spine & Metal Ring Clamps (Hidden on mobile, visible on desktop) */}
+                {/* Empty State Banner Tip */}
+                {(!activeBinder?.cards || activeBinder.cards.length === 0) && (
+                  <div className="mb-4 p-3.5 bg-red-950/60 border border-red-800/80 rounded-2xl text-center flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-bold text-red-200 animate-fadeIn">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>現在バインダーは空です。スロット（+）または「カードを査定して追加」から撮影したカードを収納できます！</span>
+                    </div>
+                    <button
+                      onClick={onOpenScan}
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-sm whitespace-nowrap cursor-pointer"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>今すぐ査定する</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Center 3-Ring Binder Spine & Metal Ring Clamps */}
                 <div className="hidden md:flex absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-10 flex-col items-center justify-around z-20 pointer-events-none">
                   {[0, 1, 2].map((ringIdx) => (
-                    <div key={ringIdx} className="w-6 h-12 rounded-full border-4 border-slate-300 shadow-lg bg-gradient-to-r from-slate-400 via-slate-100 to-slate-500 opacity-90 -rotate-3"></div>
+                    <div key={ringIdx} className="w-6 h-12 rounded-full border-4 border-slate-300 shadow-xl bg-gradient-to-r from-slate-400 via-slate-100 to-slate-500 opacity-90 -rotate-3"></div>
                   ))}
-                  <div className="absolute top-0 bottom-0 w-1 bg-black/80 shadow-2xl"></div>
+                  <div className="absolute top-0 bottom-0 w-1 bg-black/90 shadow-2xl"></div>
                 </div>
 
                 {/* 2-Page Grid Spread */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
                   
                   {/* Left Page (9-Pocket Sleeve) */}
-                  <div className="bg-slate-950/70 rounded-2xl p-3 sm:p-4 border border-slate-800 shadow-inner relative">
-                    <div className="flex items-center justify-between mb-3 text-[11px] text-slate-400 font-mono px-1">
-                      <span>PAGE {leftPageIndex + 1}</span>
+                  <div className="bg-slate-950/90 rounded-2xl p-3 sm:p-4 border border-slate-800 shadow-inner relative">
+                    <div className="flex items-center justify-between mb-3 text-xs text-slate-400 font-mono font-bold px-1">
+                      <span className="text-red-400 font-black">PAGE {leftPageIndex + 1}</span>
                       <span>9-POCKET SLEEVE</span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                    <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5">
                       {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((slotIdx) => {
                         const card = leftPageCards.find((c) => c.slotIndex === slotIdx);
                         return (
@@ -532,13 +562,13 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
                   </div>
 
                   {/* Right Page (9-Pocket Sleeve) */}
-                  <div className="bg-slate-950/70 rounded-2xl p-3 sm:p-4 border border-slate-800 shadow-inner relative">
-                    <div className="flex items-center justify-between mb-3 text-[11px] text-slate-400 font-mono px-1">
-                      <span>PAGE {rightPageIndex + 1}</span>
+                  <div className="bg-slate-950/90 rounded-2xl p-3 sm:p-4 border border-slate-800 shadow-inner relative">
+                    <div className="flex items-center justify-between mb-3 text-xs text-slate-400 font-mono font-bold px-1">
+                      <span className="text-red-400 font-black">PAGE {rightPageIndex + 1}</span>
                       <span>9-POCKET SLEEVE</span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                    <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5">
                       {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((slotIdx) => {
                         const card = rightPageCards.find((c) => c.slotIndex === slotIdx);
                         return (
@@ -566,7 +596,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
                   <button
                     onClick={handlePrevPage}
                     disabled={currentPageSpread === 0}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-bold transition-all cursor-pointer shadow-md"
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-black transition-all cursor-pointer shadow-md"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     <span>前のページ</span>
@@ -575,7 +605,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
                   <div className="flex items-center gap-3">
                     <button
                       onClick={handleAddPage}
-                      className="px-3 py-1.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 text-xs font-bold transition-colors flex items-center gap-1"
+                      className="px-3.5 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-200 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5 text-amber-400" />
                       <span>ページを追加</span>
@@ -585,7 +615,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
                   <button
                     onClick={handleNextPage}
                     disabled={currentPageSpread >= Math.ceil((activeBinder?.totalPages || 4) / 2) - 1}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-bold transition-all cursor-pointer shadow-md"
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-black transition-all cursor-pointer shadow-md"
                   >
                     <span>次のページ</span>
                     <ChevronRight className="w-4 h-4" />
@@ -610,7 +640,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
                 placeholder="カード名・番号・パック名で検索..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
               />
             </div>
 
@@ -619,7 +649,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
                 <button
                   key={rarity}
                   onClick={() => setRarityFilter(rarity)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-colors cursor-pointer ${
                     rarityFilter === rarity
                       ? 'bg-red-600 text-white shadow-sm'
                       : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -637,26 +667,26 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
               <div
                 key={card.id}
                 onClick={() => setSelectedCardForModal(card)}
-                className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-2 shadow-sm hover:shadow-xl transition-all cursor-pointer flex flex-col justify-between"
+                className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-2.5 shadow-sm hover:shadow-xl transition-all cursor-pointer flex flex-col justify-between"
               >
-                <div className="relative aspect-[63/88] rounded-xl overflow-hidden bg-black mb-2 ring-1 ring-slate-200 dark:ring-slate-800 group-hover:scale-105 transition-transform">
+                <div className="relative aspect-[63/88] rounded-xl overflow-hidden bg-black mb-2.5 ring-1 ring-slate-200 dark:ring-slate-800 group-hover:scale-105 transition-transform">
                   <img src={card.imageUrl} alt={card.cardName} className="w-full h-full object-cover" />
-                  <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur-xs text-[9px] font-black text-amber-400">
-                    {card.conditionGrade}
+                  <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded bg-black/80 backdrop-blur-xs text-[10px] font-black text-amber-400">
+                    Rank {card.conditionGrade}
                   </div>
-                  <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-red-600/90 text-[9px] font-black text-white">
+                  <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-red-600 text-[10px] font-black text-white">
                     {card.rarity}
                   </div>
                 </div>
 
-                <div className="space-y-0.5 text-left">
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                <div className="space-y-1 text-left">
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono font-bold">
                     {card.cardNumber}
                   </p>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  <h4 className="text-xs font-black text-slate-900 dark:text-white truncate">
                     {card.cardName}
                   </h4>
-                  <p className="text-xs font-black text-red-600 dark:text-rose-400">
+                  <p className="text-xs font-black text-red-600 dark:text-rose-400 font-mono">
                     ¥{card.estimatedPrice.toLocaleString()}
                   </p>
                 </div>
@@ -665,20 +695,24 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
           </div>
 
           {allCollectionCards.length === 0 && (
-            <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 space-y-3">
-              <BookOpen className="w-10 h-10 text-slate-400 mx-auto" />
-              <h3 className="font-bold text-slate-800 dark:text-slate-200">
-                該当するカードが見つかりません
-              </h3>
-              <p className="text-xs text-slate-500">
-                カメラで査定したカードをバインダーに収納しましょう！
-              </p>
+            <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-rose-400 flex items-center justify-center mx-auto shadow-inner">
+                <BookOpen className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900 dark:text-white">
+                  カードがまだ収納されていません
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
+                  カメラでカードを査定すると、AIが綺麗に枠を切り抜いてバインダーに収納できます。
+                </p>
+              </div>
               <button
                 onClick={onOpenScan}
-                className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold shadow-md shadow-red-500/25"
+                className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-lg shadow-red-500/25 active:scale-95 transition-all cursor-pointer"
               >
                 <Camera className="w-4 h-4" />
-                <span>カードを査定する</span>
+                <span>カードを査定して収納する</span>
               </button>
             </div>
           )}
@@ -693,7 +727,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
             
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded-lg bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-rose-400 text-xs font-black">
+                <span className="px-2.5 py-0.5 rounded-lg bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-rose-400 text-xs font-black">
                   {selectedCardForModal.rarity}
                 </span>
                 <span className="text-xs font-mono font-bold text-slate-500">
@@ -702,7 +736,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
               </div>
               <button
                 onClick={() => setSelectedCardForModal(null)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -717,7 +751,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 holo-shine opacity-60 pointer-events-none"></div>
-                <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg bg-black/80 text-amber-400 text-xs font-black">
+                <div className="absolute top-2 left-2 px-2.5 py-1 rounded-lg bg-black/80 text-amber-400 text-xs font-black shadow-md">
                   Rank {selectedCardForModal.conditionGrade}
                 </div>
               </div>
@@ -728,28 +762,28 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
                   <h3 className="text-xl font-black text-slate-900 dark:text-white">
                     {selectedCardForModal.cardName}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
                     {selectedCardForModal.expansionSet} ({selectedCardForModal.series})
                   </p>
                 </div>
 
-                <div className="p-3 bg-red-50 dark:bg-red-950/40 rounded-2xl border border-red-200 dark:border-red-900/60">
-                  <span className="text-[10px] text-red-600 dark:text-red-400 font-bold block">
+                <div className="p-3.5 bg-red-50 dark:bg-red-950/40 rounded-2xl border border-red-200 dark:border-red-900/60">
+                  <span className="text-[10px] text-red-600 dark:text-red-400 font-black block">
                     AI推定相場価格
                   </span>
-                  <span className="text-2xl font-black text-red-600 dark:text-rose-400">
+                  <span className="text-2xl font-black text-red-600 dark:text-rose-400 font-mono">
                     ¥{selectedCardForModal.estimatedPrice.toLocaleString()}
                   </span>
                 </div>
 
-                <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+                <div className="space-y-2 text-xs text-slate-700 dark:text-slate-200 font-semibold">
                   <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                    <span className="text-slate-400">保管場所</span>
-                    <span className="font-mono font-bold">Page {selectedCardForModal.pageIndex + 1} · Slot {selectedCardForModal.slotIndex + 1}</span>
+                    <span className="text-slate-400 font-normal">保管場所</span>
+                    <span className="font-mono font-black">Page {selectedCardForModal.pageIndex + 1} · Slot {selectedCardForModal.slotIndex + 1}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
-                    <span className="text-slate-400">状態評価</span>
-                    <span className="font-bold text-amber-500">{selectedCardForModal.conditionGrade}ランク (AI判定済み)</span>
+                    <span className="text-slate-400 font-normal">状態評価</span>
+                    <span className="font-black text-amber-500">{selectedCardForModal.conditionGrade}ランク (AI判定済み)</span>
                   </div>
                   {selectedCardForModal.notes && (
                     <p className="text-[11px] text-slate-500 italic pt-1">
@@ -764,7 +798,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
             <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
               <button
                 onClick={() => handleRemoveCard(selectedCardForModal.id)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
                 <span>スリーブから取り出す</span>
@@ -772,7 +806,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
 
               <button
                 onClick={() => setSelectedCardForModal(null)}
-                className="px-5 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold shadow-md"
+                className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-black shadow-md cursor-pointer"
               >
                 閉じる
               </button>
@@ -788,12 +822,12 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-6">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
               <h3 className="font-black text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-red-500" />
+                <BookOpen className="w-5 h-5 text-red-600" />
                 <span>新しいバインダーを作成</span>
               </h3>
               <button
                 onClick={() => setIsCreateBinderModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -806,7 +840,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="例: SAR・URコレクション, 歴代ピカチュウ"
+                  placeholder="例: SAR特選コレクション, 歴代ピカチュウ"
                   value={newBinderTitle}
                   onChange={(e) => setNewBinderTitle(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
@@ -823,7 +857,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
                       key={col}
                       type="button"
                       onClick={() => setNewBinderColor(col)}
-                      className={`h-10 rounded-xl transition-all flex items-center justify-center ${
+                      className={`h-10 rounded-xl transition-all flex items-center justify-center cursor-pointer ${
                         col === 'crimson'
                           ? 'bg-red-700'
                           : col === 'obsidian'
@@ -845,14 +879,14 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 onClick={() => setIsCreateBinderModalOpen(false)}
-                className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
+                className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
               >
                 キャンセル
               </button>
               <button
                 onClick={handleCreateNewBinder}
                 disabled={!newBinderTitle.trim()}
-                className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-lg shadow-red-500/25 disabled:opacity-50 transition-all"
+                className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-lg shadow-red-500/25 disabled:opacity-50 transition-all cursor-pointer"
               >
                 バインダーを作成
               </button>
@@ -888,13 +922,13 @@ const PocketSlot: React.FC<PocketSlotProps> = ({
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="relative aspect-[63/88] rounded-xl overflow-hidden bg-slate-900/90 border border-slate-700/60 shadow-md group cursor-pointer transition-transform hover:scale-[1.03]"
+      className="relative aspect-[63/88] rounded-xl overflow-hidden bg-slate-900 border-2 border-slate-700/80 shadow-lg group cursor-pointer transition-transform hover:scale-[1.03]"
     >
       {/* Glossy Plastic Sleeve Sheen Over Pocket */}
-      <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-white/5 via-transparent to-white/10 z-10"></div>
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-white/10 via-transparent to-white/15 z-10"></div>
       
       {/* Top Sleeve Opening tab reflection */}
-      <div className="absolute top-0 inset-x-0 h-1 bg-white/20 z-10"></div>
+      <div className="absolute top-0 inset-x-0 h-1.5 bg-white/30 z-10"></div>
 
       {card ? (
         <div
@@ -911,7 +945,7 @@ const PocketSlot: React.FC<PocketSlotProps> = ({
           {/* Holographic light foil reflection shifting with mouse */}
           <div
             className={`absolute inset-0 holo-shine transition-opacity duration-300 pointer-events-none ${
-              isHovered ? 'opacity-85' : 'opacity-20'
+              isHovered ? 'opacity-90' : 'opacity-25'
             }`}
             style={{
               backgroundPosition: `${mouseHoloPos.x}% ${mouseHoloPos.y}%`,
@@ -919,28 +953,34 @@ const PocketSlot: React.FC<PocketSlotProps> = ({
           ></div>
 
           {/* Condition Grade badge pinned on sleeve */}
-          <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-xs text-[8px] sm:text-[9px] font-black text-amber-400 z-10 shadow-sm">
-            {card.conditionGrade}
+          <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded bg-black/85 backdrop-blur-xs text-[9px] sm:text-[10px] font-black text-amber-400 z-10 shadow-md">
+            Rank {card.conditionGrade}
           </div>
 
-          {/* Price Overlay on Hover */}
-          <div className={`absolute bottom-0 inset-x-0 p-1 bg-gradient-to-t from-black/90 via-black/60 to-transparent transition-opacity duration-200 text-center z-10 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
-            <span className="text-[9px] sm:text-[10px] font-black text-white block truncate">
+          {/* Card Info Tag on Bottom (Always visible for clarity) */}
+          <div className="absolute bottom-0 inset-x-0 p-1.5 bg-gradient-to-t from-black via-black/80 to-transparent text-center z-10">
+            <p className="text-[10px] sm:text-[11px] font-bold text-white truncate drop-shadow-sm">
+              {card.cardName}
+            </p>
+            <p className="text-[9px] sm:text-[10px] font-mono font-black text-amber-400 block truncate">
               ¥{card.estimatedPrice.toLocaleString()}
-            </span>
+            </p>
           </div>
         </div>
       ) : (
-        /* EMPTY POCKET SLOT */
+        /* EMPTY POCKET SLOT (High contrast, clearly visible) */
         <div
           onClick={onEmptyClick}
-          className="w-full h-full flex flex-col items-center justify-center p-2 text-center text-slate-600 dark:text-slate-500 hover:text-red-400 hover:bg-slate-800/40 transition-colors"
+          className="w-full h-full flex flex-col items-center justify-center p-2 text-center text-slate-400 hover:text-red-400 hover:bg-slate-800/60 transition-colors"
         >
-          <div className="w-7 h-7 rounded-full border border-dashed border-slate-600 flex items-center justify-center mb-1 group-hover:border-red-400 group-hover:scale-110 transition-all">
-            <Plus className="w-3.5 h-3.5" />
+          <div className="w-8 h-8 rounded-full border-2 border-dashed border-slate-500 flex items-center justify-center mb-1.5 group-hover:border-red-400 group-hover:scale-110 transition-all bg-slate-800/40">
+            <Plus className="w-4 h-4 text-slate-300 group-hover:text-red-400" />
           </div>
-          <span className="text-[9px] font-mono opacity-60">
+          <span className="text-[10px] font-mono font-bold text-slate-400 group-hover:text-red-300">
             SLOT {slotIndex + 1}
+          </span>
+          <span className="text-[9px] text-slate-500 font-medium hidden sm:block">
+            + カードを収納
           </span>
         </div>
       )}

@@ -5,7 +5,6 @@
  */
 
 import { AppraisalRecord } from '../types/card';
-import { SAMPLE_CARDS } from './sampleCards';
 
 export type BinderCoverColor = 'crimson' | 'obsidian' | 'sapphire' | 'emerald' | 'amber' | 'amethyst';
 export type BinderCoverTheme = 'pokeball' | 'luxury_leather' | 'holo_grid' | 'vintage';
@@ -41,125 +40,29 @@ export interface CollectionBinder {
   updatedAt: string;
 }
 
-const STORAGE_BINDERS_KEY = 'card_scanner_binders_v1';
-const STORAGE_ACTIVE_BINDER_KEY = 'card_scanner_active_binder_id';
+const STORAGE_BINDERS_KEY = 'card_scanner_binders_v2';
+const STORAGE_ACTIVE_BINDER_KEY = 'card_scanner_active_binder_id_v2';
 
-// Initial seed binders
+// Initial clean, empty binder
 function generateDefaultBinders(): CollectionBinder[] {
-  const charizard = SAMPLE_CARDS[0];
-  const pikachu = SAMPLE_CARDS[1];
-  const nanjamo = SAMPLE_CARDS[2];
-  const mimosa = SAMPLE_CARDS[3];
-
   const now = new Date().toISOString();
 
   const primaryBinder: CollectionBinder = {
-    id: 'binder_sar_collection',
-    title: 'SAR・スペシャルアート特選',
-    subtitle: '最高ランク鑑定＆お気に入りコレクション',
+    id: 'binder_main_collection',
+    title: 'マイコレクション',
+    subtitle: 'ポケモンカードAI査定コレクション',
     coverColor: 'crimson',
     coverTheme: 'pokeball',
-    totalPages: 4, // 4 pages = 36 slots
+    totalPages: 4, // 4 pages = 36 empty slots ready for filing
     createdAt: now,
     updatedAt: now,
-    cards: [
-      {
-        id: 'slot_1',
-        binderId: 'binder_sar_collection',
-        pageIndex: 0,
-        slotIndex: 0,
-        cardName: charizard.name,
-        cardNumber: charizard.cardNumber,
-        rarity: charizard.rarity,
-        expansionSet: charizard.expansionSet,
-        series: 'スカーレット&バイオレット',
-        conditionGrade: 'S',
-        estimatedPrice: charizard.basePrice,
-        imageUrl: charizard.dataUrl,
-        addedAt: now,
-        notes: 'AI査定 Sランク・白かけなし完全美品',
-      },
-      {
-        id: 'slot_2',
-        binderId: 'binder_sar_collection',
-        pageIndex: 0,
-        slotIndex: 1,
-        cardName: pikachu.name,
-        cardNumber: pikachu.cardNumber,
-        rarity: pikachu.rarity,
-        expansionSet: pikachu.expansionSet,
-        series: 'スカーレット&バイオレット',
-        conditionGrade: 'S',
-        estimatedPrice: pikachu.basePrice,
-        imageUrl: pikachu.dataUrl,
-        addedAt: now,
-        notes: 'マスターボールミラー仕様 センタリング50:50',
-      },
-      {
-        id: 'slot_3',
-        binderId: 'binder_sar_collection',
-        pageIndex: 0,
-        slotIndex: 2,
-        cardName: nanjamo.name,
-        cardNumber: nanjamo.cardNumber,
-        rarity: nanjamo.rarity,
-        expansionSet: nanjamo.expansionSet,
-        series: 'スカーレット&バイオレット',
-        conditionGrade: 'A',
-        estimatedPrice: nanjamo.basePrice,
-        imageUrl: nanjamo.dataUrl,
-        addedAt: now,
-        notes: '大人気サポートSAR 微小初期傷あり',
-      },
-      {
-        id: 'slot_4',
-        binderId: 'binder_sar_collection',
-        pageIndex: 0,
-        slotIndex: 4, // Center pocket
-        cardName: mimosa.name,
-        cardNumber: mimosa.cardNumber,
-        rarity: mimosa.rarity,
-        expansionSet: mimosa.expansionSet,
-        series: 'スカーレット&バイオレット',
-        conditionGrade: 'S',
-        estimatedPrice: mimosa.basePrice,
-        imageUrl: mimosa.dataUrl,
-        addedAt: now,
-        notes: 'バイオレットex 最高峰サポート',
-      },
-    ],
+    cards: [], // Starts completely empty
   };
 
-  const investmentBinder: CollectionBinder = {
-    id: 'binder_vault_investment',
-    title: '資産価値・ガチホ保管庫',
-    subtitle: '長期保有・PSA候補カード',
-    coverColor: 'obsidian',
-    coverTheme: 'luxury_leather',
-    totalPages: 2,
-    createdAt: now,
-    updatedAt: now,
-    cards: [
-      {
-        id: 'slot_inv_1',
-        binderId: 'binder_vault_investment',
-        pageIndex: 0,
-        slotIndex: 0,
-        cardName: pikachu.name,
-        cardNumber: pikachu.cardNumber,
-        rarity: pikachu.rarity,
-        expansionSet: pikachu.expansionSet,
-        series: 'スカーレット&バイオレット',
-        conditionGrade: 'S',
-        estimatedPrice: pikachu.basePrice,
-        imageUrl: pikachu.dataUrl,
-        addedAt: now,
-      },
-    ],
-  };
-
-  return [primaryBinder, investmentBinder];
+  return [primaryBinder];
 }
+
+export const COLLECTION_UPDATED_EVENT = 'card_scanner_collection_updated';
 
 /**
  * Fetch all binders from storage
@@ -173,34 +76,49 @@ export function getStoredBinders(): CollectionBinder[] {
       localStorage.setItem(STORAGE_BINDERS_KEY, JSON.stringify(initial));
       return initial;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      const initial = generateDefaultBinders();
+      localStorage.setItem(STORAGE_BINDERS_KEY, JSON.stringify(initial));
+      return initial;
+    }
+    return parsed;
   } catch {
     return generateDefaultBinders();
   }
 }
 
 /**
- * Save all binders to storage
+ * Save all binders to storage and broadcast event to all listeners
  */
 export function saveStoredBinders(binders: CollectionBinder[]) {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_BINDERS_KEY, JSON.stringify(binders));
+    window.dispatchEvent(new CustomEvent(COLLECTION_UPDATED_EVENT, { detail: binders }));
   } catch (err) {
     console.warn('Failed to save binders:', err);
   }
 }
 
 /**
+ * Get total cards count across all binders
+ */
+export function getTotalCollectionCardCount(): number {
+  const binders = getStoredBinders();
+  return binders.reduce((acc, b) => acc + (b.cards?.length || 0), 0);
+}
+
+/**
  * Get active binder ID
  */
 export function getActiveBinderId(): string {
-  if (typeof window === 'undefined') return 'binder_sar_collection';
+  if (typeof window === 'undefined') return 'binder_main_collection';
   try {
     const id = localStorage.getItem(STORAGE_ACTIVE_BINDER_KEY);
     if (id) return id;
   } catch {}
-  return 'binder_sar_collection';
+  return 'binder_main_collection';
 }
 
 /**
@@ -303,8 +221,20 @@ export function addCardToBinder(
   preferredSlot?: number,
   customImageUrl?: string
 ): { success: boolean; binder: CollectionBinder; slotCard: BinderSlotCard } {
-  const binders = getStoredBinders();
-  let binder = binders.find((b) => b.id === binderId) || binders[0];
+  let binders = getStoredBinders();
+  if (!binders || binders.length === 0) {
+    binders = generateDefaultBinders();
+  }
+
+  let binder = binders.find((b) => b.id === binderId);
+  if (!binder) {
+    binder = binders[0];
+  }
+
+  // Ensure binder.cards array is initialized
+  if (!Array.isArray(binder.cards)) {
+    binder.cards = [];
+  }
 
   let targetPage = preferredPage ?? 0;
   let targetSlot = preferredSlot ?? 0;
@@ -325,23 +255,28 @@ export function addCardToBinder(
     (c) => !(c.pageIndex === targetPage && c.slotIndex === targetSlot)
   );
 
+  const cardImage =
+    customImageUrl || appraisal.croppedImageUrl || appraisal.frontImageUrl || '';
+
   const slotCard: BinderSlotCard = {
-    id: `slot_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    id: `slot_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     binderId: binder.id,
     pageIndex: targetPage,
     slotIndex: targetSlot,
-    cardName: appraisal.cardName,
-    cardNumber: appraisal.cardNumber,
-    rarity: appraisal.rarity,
-    expansionSet: appraisal.expansionSet,
-    series: appraisal.series,
-    conditionGrade: appraisal.conditionGrade,
-    estimatedPrice: appraisal.estimatedPrice,
-    imageUrl: customImageUrl || appraisal.frontImageUrl,
-    originalImageUrl: appraisal.frontImageUrl,
+    cardName: appraisal.cardName || 'ポケモンカード',
+    cardNumber: appraisal.cardNumber || '---/---',
+    rarity: appraisal.rarity || 'Normal',
+    expansionSet: appraisal.expansionSet || 'ポケモンカード',
+    series: appraisal.series || 'スカーレット&バイオレット',
+    conditionGrade: appraisal.conditionGrade || 'A',
+    estimatedPrice: appraisal.estimatedPrice || 0,
+    imageUrl: cardImage,
+    originalImageUrl: appraisal.frontImageUrl || cardImage,
     appraisalId: appraisal.id,
     addedAt: new Date().toISOString(),
-    notes: appraisal.notes || `${appraisal.conditionGrade}ランク AI査定済み (¥${appraisal.estimatedPrice.toLocaleString()})`,
+    notes:
+      appraisal.notes ||
+      `${appraisal.conditionGrade || 'A'}ランク AI査定済み (¥${(appraisal.estimatedPrice || 0).toLocaleString()})`,
   };
 
   binder.cards.push(slotCard);
@@ -358,8 +293,19 @@ export function addBatchCardsToBinder(
   binderId: string,
   appraisals: AppraisalRecord[]
 ): { success: boolean; addedCount: number; binder: CollectionBinder } {
-  const binders = getStoredBinders();
-  const binder = binders.find((b) => b.id === binderId) || binders[0];
+  let binders = getStoredBinders();
+  if (!binders || binders.length === 0) {
+    binders = generateDefaultBinders();
+  }
+
+  let binder = binders.find((b) => b.id === binderId);
+  if (!binder) {
+    binder = binders[0];
+  }
+
+  if (!Array.isArray(binder.cards)) {
+    binder.cards = [];
+  }
 
   let addedCount = 0;
   for (const item of appraisals) {
@@ -368,23 +314,25 @@ export function addBatchCardsToBinder(
       binder.totalPages = next.pageIndex + 1;
     }
 
+    const cardImage = item.croppedImageUrl || item.frontImageUrl || '';
+
     const slotCard: BinderSlotCard = {
-      id: `slot_${Date.now()}_${Math.random().toString(36).substring(2, 6)}_${addedCount}`,
+      id: `slot_${Date.now()}_${Math.random().toString(36).substring(2, 7)}_${addedCount}`,
       binderId: binder.id,
       pageIndex: next.pageIndex,
       slotIndex: next.slotIndex,
-      cardName: item.cardName,
-      cardNumber: item.cardNumber,
-      rarity: item.rarity,
-      expansionSet: item.expansionSet,
-      series: item.series,
-      conditionGrade: item.conditionGrade,
-      estimatedPrice: item.estimatedPrice,
-      imageUrl: item.frontImageUrl,
-      originalImageUrl: item.frontImageUrl,
+      cardName: item.cardName || 'ポケモンカード',
+      cardNumber: item.cardNumber || '---/---',
+      rarity: item.rarity || 'Normal',
+      expansionSet: item.expansionSet || 'ポケモンカード',
+      series: item.series || 'スカーレット&バイオレット',
+      conditionGrade: item.conditionGrade || 'A',
+      estimatedPrice: item.estimatedPrice || 0,
+      imageUrl: cardImage,
+      originalImageUrl: item.frontImageUrl || cardImage,
       appraisalId: item.id,
       addedAt: new Date().toISOString(),
-      notes: `${item.conditionGrade}ランク AI一括査定追加`,
+      notes: `${item.conditionGrade || 'A'}ランク AI一括査定追加`,
     };
 
     binder.cards.push(slotCard);
