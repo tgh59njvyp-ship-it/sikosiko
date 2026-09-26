@@ -35,10 +35,16 @@ export const Header: React.FC<HeaderProps> = ({
           className="flex items-center gap-2.5 cursor-pointer select-none group"
         >
           {/* Pokéball / Scanner icon badge */}
-          <div className="relative w-9 h-9 rounded-xl bg-gradient-to-tr from-red-600 via-rose-500 to-red-500 flex items-center justify-center shadow-md shadow-red-500/20 group-hover:scale-105 transition-transform">
-            <div className="w-4 h-4 rounded-full border-2 border-white flex items-center justify-center">
-              <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-            </div>
+          <div className="relative w-9 h-9 rounded-xl overflow-hidden bg-gradient-to-tr from-red-600 via-rose-500 to-red-500 flex items-center justify-center shadow-md shadow-red-500/20 group-hover:scale-105 transition-transform">
+            <img
+              src="/icon.png"
+              alt="CARD SCANNER"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // Fallback to geometric Pokeball if image fails
+                (e.currentTarget as HTMLElement).style.display = 'none';
+              }}
+            />
             <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
