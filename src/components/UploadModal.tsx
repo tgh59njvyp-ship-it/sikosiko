@@ -15,6 +15,7 @@ import {
   Info,
   ChevronRight,
   Eye,
+  Key,
 } from 'lucide-react';
 
 interface UploadModalProps {
@@ -23,6 +24,8 @@ interface UploadModalProps {
   initialMode?: 'camera' | 'upload' | 'batch';
   onStartSingleAppraisal: (frontImage: string, backImage?: string) => void;
   onStartBatchAppraisal: (images: string[]) => void;
+  geminiConfigured?: boolean;
+  onOpenGeminiModal?: () => void;
 }
 
 export const UploadModal: React.FC<UploadModalProps> = ({
@@ -31,6 +34,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   initialMode = 'upload',
   onStartSingleAppraisal,
   onStartBatchAppraisal,
+  geminiConfigured = false,
+  onOpenGeminiModal,
 }) => {
   const [mode, setMode] = useState<'camera' | 'upload' | 'batch'>(initialMode);
   const [frontImage, setFrontImage] = useState<string | null>(null);
@@ -231,6 +236,41 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Gemini Engine Banner */}
+        {geminiConfigured ? (
+          <div className="px-5 py-2 bg-emerald-50 dark:bg-emerald-950/40 border-b border-emerald-200 dark:border-emerald-900/40 flex items-center justify-between text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Gemini Vision AI 高精度識別モード 有効</span>
+            </span>
+            {onOpenGeminiModal && (
+              <button
+                type="button"
+                onClick={onOpenGeminiModal}
+                className="underline hover:text-emerald-900 dark:hover:text-emerald-100 text-[10px]"
+              >
+                APIキー変更
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="px-5 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900/40 flex items-center justify-between text-[11px] text-amber-800 dark:text-amber-300">
+            <span className="flex items-center gap-1.5">
+              <Key className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span>Gemini APIキーを設定すると、アップロードしたカードをAIが瞬時に自動鑑定します</span>
+            </span>
+            {onOpenGeminiModal && (
+              <button
+                type="button"
+                onClick={onOpenGeminiModal}
+                className="font-bold underline text-red-600 dark:text-rose-400 hover:underline shrink-0 ml-2"
+              >
+                設定する (無料)
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Mode Switch Tabs */}
         <div className="px-5 pt-3 flex gap-2 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50">

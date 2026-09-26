@@ -235,16 +235,16 @@ export function evaluateClientAppraisal(data: {
   frontImageUrl: string;
   backImageUrl?: string;
 }): AppraisalRecord {
-  const normName = data.cardName.trim();
-  const matched = CLIENT_CARDS_DATABASE.find(
+  const normName = (data.cardName || '').trim();
+  const matched = normName.length >= 2 ? CLIENT_CARDS_DATABASE.find(
     (c) =>
-      c.name.toLowerCase().includes(normName.toLowerCase()) ||
-      normName.toLowerCase().includes(c.name.toLowerCase()) ||
-      (data.cardNumber && c.cardNumber.includes(data.cardNumber.trim()))
-  );
+      c.name === normName ||
+      (data.cardNumber && c.cardNumber === data.cardNumber.trim()) ||
+      c.name.toLowerCase() === normName.toLowerCase()
+  ) : undefined;
 
-  let basePrice = matched ? matched.baseMarketPrice : (data.estimatedPriceSuggestion || 3800);
-  let confidence: '高' | '中' | '低' = matched ? '高' : (data.confidenceScore && data.confidenceScore > 80 ? '中' : '低');
+  let basePrice = data.estimatedPriceSuggestion || (matched ? matched.baseMarketPrice : 3800);
+  let confidence: '高' | '中' | '低' = (data.confidenceScore && data.confidenceScore > 80) ? '高' : (matched ? '高' : '中');
   const grade: 'S' | 'A' | 'B' | 'C' | 'D' = data.conditionGrade || 'A';
 
   let conditionMultiplier = 1.0;
@@ -269,17 +269,17 @@ export function evaluateClientAppraisal(data: {
     id: `app_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     userId: 'usr_guest',
     cardId: matched?.id,
-    cardName: matched ? matched.name : data.cardName,
-    cardNumber: matched ? matched.cardNumber : (data.cardNumber || '不明/プロモ'),
-    rarity: matched ? matched.rarity : (data.rarity || '不明/ノーマル'),
-    expansionSet: matched ? matched.expansionSet : (data.expansionSet || 'ポケットモンスターカードゲーム'),
-    series: matched ? matched.series : (data.series || 'スカーレット&バイオレット'),
-    cardType: matched ? matched.cardType : (data.cardType || '無色'),
-    hp: matched ? matched.hp || undefined : data.hp,
+    cardName: data.cardName || (matched ? matched.name : '不明なカード'),
+    cardNumber: data.cardNumber || (matched ? matched.cardNumber : '不明/プロモ'),
+    rarity: data.rarity || (matched ? matched.rarity : '不明/ノーマル'),
+    expansionSet: data.expansionSet || (matched ? matched.expansionSet : 'ポケットモンスターカードゲーム'),
+    series: data.series || (matched ? matched.series : 'スカーレット&バイオレット'),
+    cardType: data.cardType || (matched ? matched.cardType : '無色'),
+    hp: data.hp ?? (matched ? matched.hp || undefined : undefined),
     language: data.language || '日本語',
-    specialFinish: matched ? matched.specialFinish : (data.specialFinish || '通常'),
-    isAlternateArt: matched ? matched.isAlternateArt : Boolean(data.isAlternateArt),
-    isPromo: matched ? matched.isPromo : Boolean(data.isPromo),
+    specialFinish: data.specialFinish || (matched ? matched.specialFinish : '通常'),
+    isAlternateArt: data.isAlternateArt ?? (matched ? matched.isAlternateArt : false),
+    isPromo: data.isPromo ?? (matched ? matched.isPromo : false),
     frontImageUrl: data.frontImageUrl,
     backImageUrl: data.backImageUrl,
     estimatedPrice,

@@ -81,7 +81,12 @@ function createCardSvgDataUrl(title: string, subtitle: string, hp: string, typeC
     <text x="133" y="590" font-family="'Plus Jakarta Sans', sans-serif" font-weight="800" font-size="10" fill="#ffffff" text-anchor="middle">${rarityStr}</text>
     <text x="410" y="590" font-family="'Plus Jakarta Sans', sans-serif" font-size="10" fill="#94a3b8" text-anchor="end">©2026 Pokémon/Nintendo/CR/GF</text>
   </svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  try {
+    const b64 = typeof btoa !== 'undefined' ? btoa(unescape(encodeURIComponent(svg))) : Buffer.from(svg).toString('base64');
+    return `data:image/svg+xml;base64,${b64}`;
+  } catch {
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }
 }
 
 export const SAMPLE_CARDS: SampleCard[] = [

@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Zap,
   Activity,
+  Key,
 } from 'lucide-react';
 import { SAMPLE_CARDS, SampleCard } from '../lib/sampleCards';
 
@@ -18,12 +19,16 @@ interface HeroHomeProps {
   onOpenScan: (mode?: 'camera' | 'upload' | 'batch') => void;
   onSelectSample: (sample: SampleCard) => void;
   onNavigateSearch: () => void;
+  geminiConfigured?: boolean;
+  onOpenGeminiModal?: () => void;
 }
 
 export const HeroHome: React.FC<HeroHomeProps> = ({
   onOpenScan,
   onSelectSample,
   onNavigateSearch,
+  geminiConfigured = false,
+  onOpenGeminiModal,
 }) => {
   return (
     <div className="w-full pb-20 md:pb-12 space-y-12 sm:space-y-16">
@@ -129,6 +134,45 @@ export const HeroHome: React.FC<HeroHomeProps> = ({
             </div>
 
           </div>
+
+          {/* Gemini AI Settings Card */}
+          {onOpenGeminiModal && (
+            <div className="mt-8 p-4 sm:p-5 rounded-3xl bg-slate-900 text-white shadow-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-left">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-rose-500 to-red-500 flex items-center justify-center shrink-0 shadow-lg shadow-red-500/20">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-sm sm:text-base text-white">
+                      Gemini Vision AI 鑑定エンジン
+                    </h4>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        geminiConfigured
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      }`}
+                    >
+                      {geminiConfigured ? '● 稼働中' : '● APIキー設定推奨'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                    {geminiConfigured
+                      ? 'Google Gemini AIが連携中。撮影したあらゆるポケカを自動識別・精密査定します。'
+                      : 'お好みのGemini APIキー（無料）をサイト内で設定すると、アップロードしたカードをAIが瞬時に識別します。'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={onOpenGeminiModal}
+                className="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-900 text-xs font-bold shrink-0 shadow-md active:scale-95 transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+              >
+                <Key className="w-3.5 h-3.5 text-red-600" />
+                <span>{geminiConfigured ? 'API設定を変更' : 'APIキーを設定する (無料)'}</span>
+              </button>
+            </div>
+          )}
 
         </div>
       </section>

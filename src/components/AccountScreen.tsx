@@ -13,6 +13,7 @@ import {
   Sparkles,
   ArrowRight,
   ExternalLink,
+  Key,
 } from 'lucide-react';
 import { CardRecord, User } from '../types/card';
 import { loginGoogle, loginUser } from '../lib/api';
@@ -26,6 +27,8 @@ interface AccountScreenProps {
   darkMode: boolean;
   setDarkMode: (val: boolean) => void;
   onNavigateTab: (tab: string) => void;
+  geminiConfigured?: boolean;
+  onOpenGeminiModal?: () => void;
 }
 
 export const AccountScreen: React.FC<AccountScreenProps> = ({
@@ -37,6 +40,8 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
   darkMode,
   setDarkMode,
   onNavigateTab,
+  geminiConfigured = false,
+  onOpenGeminiModal,
 }) => {
   const [emailInput, setEmailInput] = useState('');
   const [nameInput, setNameInput] = useState('');
@@ -255,6 +260,40 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
             >
               <div className="w-5 h-5 rounded-full bg-white shadow-sm"></div>
             </button>
+          </div>
+
+          {/* Gemini API Key Section */}
+          <div className="py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+                <Key className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs sm:text-sm flex items-center gap-2">
+                  <span>Google Gemini API 設定</span>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                      geminiConfigured
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300'
+                    }`}
+                  >
+                    {geminiConfigured ? '連携中' : '未設定'}
+                  </span>
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  AI画像認識鑑定に使用するAPIキー（無料登録可能）
+                </span>
+              </div>
+            </div>
+            {onOpenGeminiModal && (
+              <button
+                onClick={onOpenGeminiModal}
+                className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+              >
+                {geminiConfigured ? '変更 / テスト' : '設定する'}
+              </button>
+            )}
           </div>
 
           {/* Admin shortcut */}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, Sparkles, Moon, Sun, ShieldCheck, User as UserIcon } from 'lucide-react';
+import { Camera, Sparkles, Moon, Sun, ShieldCheck, User as UserIcon, Key } from 'lucide-react';
 import { User } from '../types/card';
 
 interface HeaderProps {
@@ -10,6 +10,8 @@ interface HeaderProps {
   user: User | null;
   onOpenAuth: () => void;
   onOpenScan: () => void;
+  geminiConfigured?: boolean;
+  onOpenGeminiModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,6 +22,8 @@ export const Header: React.FC<HeaderProps> = ({
   user,
   onOpenAuth,
   onOpenScan,
+  geminiConfigured = false,
+  onOpenGeminiModal,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-white/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 transition-colors">
@@ -102,6 +106,25 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Gemini API Key Settings Button */}
+          {onOpenGeminiModal && (
+            <button
+              onClick={onOpenGeminiModal}
+              title="Gemini API設定（タップしてAPIキーを登録・変更）"
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-sm cursor-pointer ${
+                geminiConfigured
+                  ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                  : 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+              }`}
+            >
+              <Key className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span className="hidden sm:inline">
+                {geminiConfigured ? 'Gemini 連携中' : 'Gemini API設定'}
+              </span>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${geminiConfigured ? 'bg-emerald-500' : 'bg-amber-500 animate-ping'}`} />
+            </button>
+          )}
+
           {/* Quick Scan CTA on Desktop */}
           <button
             onClick={onOpenScan}

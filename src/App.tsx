@@ -16,6 +16,7 @@ import { HistoryScreen } from './components/HistoryScreen';
 import { AccountScreen } from './components/AccountScreen';
 import { AdminScreen } from './components/AdminScreen';
 import { ErrorNotice } from './components/ErrorNotice';
+import { GeminiKeyModal } from './components/GeminiKeyModal';
 
 import {
   AppraisalRecord,
@@ -29,7 +30,9 @@ import {
   fetchAppraisals,
   fetchFavorites,
   toggleFavorite,
+  fetchHealth,
 } from './lib/api';
+import { getStoredApiKey } from './lib/geminiKey';
 import { SampleCard } from './lib/sampleCards';
 
 export default function App() {
@@ -52,6 +55,10 @@ export default function App() {
   // Upload Modal State
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [uploadMode, setUploadMode] = useState<'camera' | 'upload' | 'batch'>('upload');
+
+  // Gemini API Configuration Modal State
+  const [isGeminiModalOpen, setIsGeminiModalOpen] = useState(false);
+  const [geminiConfigured, setGeminiConfigured] = useState(false);
 
   // App Theme & User Auth
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -80,10 +87,26 @@ export default function App() {
     }
   }, [darkMode]);
 
+  // Check Gemini Status
+  const checkGeminiStatus = async () => {
+    const localKey = getStoredApiKey();
+    if (localKey) {
+      setGeminiConfigured(true);
+      return;
+    }
+    try {
+      const health = await fetchHealth();
+      setGeminiConfigured(health.geminiConfigured);
+    } catch {
+      setGeminiConfigured(false);
+    }
+  };
+
   // Initial load
   useEffect(() => {
     loadAppraisals();
     loadFavorites();
+    checkGeminiStatus();
   }, []);
 
   const loadAppraisals = async () => {
@@ -124,11 +147,14 @@ export default function App() {
       loadAppraisals();
     } catch (err: any) {
       console.error(err);
-      setErrorMessage(
-        err.message ||
-          'カードを認識できませんでした。カード全体が写っている、明るくピントの合った写真をアップロードしてください。'
-      );
+      const msg = err.message || 'カードを認識できませんでした。カード全体が写っている、明るくピントの合った写真をアップロードしてください。';
+      setErrorMessage(msg);
       setAnalysisState('error');
+
+      // If user needs to set API key, open modal to assist them
+      if (err?.needsApiKey) {
+        setIsGeminiModalOpen(true);
+      }
     }
   };
 
@@ -222,6 +248,8 @@ export default function App() {
         user={user}
         onOpenAuth={() => setCurrentTab('account')}
         onOpenScan={() => handleOpenScan('upload')}
+        geminiConfigured={geminiConfigured}
+        onOpenGeminiModal={() => setIsGeminiModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -236,6 +264,7 @@ export default function App() {
             errorMessage={errorMessage}
             onRetry={() => handleStartSingleAppraisal(analyzingImage)}
             onOpenUpload={() => handleOpenScan('upload')}
+            onOpenGeminiModal={() => setIsGeminiModalOpen(true)}
           />
         ) : analysisState === 'result' && activeAppraisal ? (
           <ResultScreen
@@ -279,6 +308,8 @@ export default function App() {
             darkMode={darkMode}
             setDarkMode={setDarkMode}
             onNavigateTab={setCurrentTab}
+            geminiConfigured={geminiConfigured}
+            onOpenGeminiModal={() => setIsGeminiModalOpen(true)}
           />
         ) : currentTab === 'admin' ? (
           <AdminScreen onBack={() => setCurrentTab('home')} />
@@ -287,6 +318,8 @@ export default function App() {
             onOpenScan={handleOpenScan}
             onSelectSample={handleSelectSample}
             onNavigateSearch={() => setCurrentTab('search')}
+            geminiConfigured={geminiConfigured}
+            onOpenGeminiModal={() => setIsGeminiModalOpen(true)}
           />
         )}
       </main>
@@ -298,6 +331,17 @@ export default function App() {
         initialMode={uploadMode}
         onStartSingleAppraisal={handleStartSingleAppraisal}
         onStartBatchAppraisal={handleStartBatchAppraisal}
+        geminiConfigured={geminiConfigured}
+        onOpenGeminiModal={() => setIsGeminiModalOpen(true)}
+      />
+
+      {/* Gemini API Key Configuration Modal */}
+      <GeminiKeyModal
+        isOpen={isGeminiModalOpen}
+        onClose={() => setIsGeminiModalOpen(false)}
+        onKeyUpdated={() => {
+          checkGeminiStatus();
+        }}
       />
 
       {/* Mobile Bottom Navigation */}

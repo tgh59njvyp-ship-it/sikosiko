@@ -475,16 +475,16 @@ function evaluateCardAppraisal(data: {
   frontImageUrl: string;
   backImageUrl?: string;
 }): AppraisalRecord {
-  const normName = data.cardName.trim();
-  const matched = CARDS_DATABASE.find(
+  const normName = (data.cardName || '').trim();
+  const matched = normName.length >= 2 ? CARDS_DATABASE.find(
     (c) =>
-      c.name.toLowerCase().includes(normName.toLowerCase()) ||
-      normName.toLowerCase().includes(c.name.toLowerCase()) ||
-      (data.cardNumber && c.cardNumber.includes(data.cardNumber.trim()))
-  );
+      c.name === normName ||
+      (data.cardNumber && c.cardNumber === data.cardNumber.trim()) ||
+      c.name.toLowerCase() === normName.toLowerCase()
+  ) : undefined;
 
-  let basePrice = matched ? matched.baseMarketPrice : (data.estimatedPriceSuggestion || 3800);
-  let confidence: '高' | '中' | '低' = matched ? '高' : (data.confidenceScore && data.confidenceScore > 80 ? '中' : '低');
+  let basePrice = data.estimatedPriceSuggestion || (matched ? matched.baseMarketPrice : 3800);
+  let confidence: '高' | '中' | '低' = (data.confidenceScore && data.confidenceScore > 80) ? '高' : (matched ? '高' : '中');
   const grade: 'S' | 'A' | 'B' | 'C' | 'D' = data.conditionGrade || 'A';
 
   // Apply condition multiplier
@@ -510,17 +510,17 @@ function evaluateCardAppraisal(data: {
     id: `app_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     userId: 'usr_guest',
     cardId: matched?.id,
-    cardName: matched ? matched.name : data.cardName,
-    cardNumber: matched ? matched.cardNumber : (data.cardNumber || '不明/プロモ'),
-    rarity: matched ? matched.rarity : (data.rarity || '不明/ノーマル'),
-    expansionSet: matched ? matched.expansionSet : (data.expansionSet || 'ポケットモンスターカードゲーム'),
-    series: matched ? matched.series : (data.series || 'スカーレット&バイオレット'),
-    cardType: matched ? matched.cardType : (data.cardType || '無色'),
-    hp: matched ? matched.hp || undefined : data.hp,
+    cardName: data.cardName || (matched ? matched.name : '不明なカード'),
+    cardNumber: data.cardNumber || (matched ? matched.cardNumber : '不明/プロモ'),
+    rarity: data.rarity || (matched ? matched.rarity : '不明/ノーマル'),
+    expansionSet: data.expansionSet || (matched ? matched.expansionSet : 'ポケットモンスターカードゲーム'),
+    series: data.series || (matched ? matched.series : 'スカーレット&バイオレット'),
+    cardType: data.cardType || (matched ? matched.cardType : '無色'),
+    hp: data.hp ?? (matched ? matched.hp || undefined : undefined),
     language: data.language || '日本語',
-    specialFinish: matched ? matched.specialFinish : (data.specialFinish || '通常'),
-    isAlternateArt: matched ? matched.isAlternateArt : Boolean(data.isAlternateArt),
-    isPromo: matched ? matched.isPromo : Boolean(data.isPromo),
+    specialFinish: data.specialFinish || (matched ? matched.specialFinish : '通常'),
+    isAlternateArt: data.isAlternateArt ?? (matched ? matched.isAlternateArt : false),
+    isPromo: data.isPromo ?? (matched ? matched.isPromo : false),
     frontImageUrl: data.frontImageUrl,
     backImageUrl: data.backImageUrl,
     estimatedPrice,
@@ -555,18 +555,47 @@ function evaluateCardAppraisal(data: {
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {
+  const userApiKey = (req.headers['x-gemini-api-key'] as string) || req.query.apiKey || process.env.GEMINI_API_KEY || '';
   res.json({
     status: 'ok',
-    geminiConfigured: Boolean(apiKey),
+    geminiConfigured: Boolean(userApiKey || apiKey),
     timestamp: new Date().toISOString(),
   });
+});
+
+// Verify Gemini API key
+app.post('/api/verify-gemini-key', async (req: Request, res: Response) => {
+  const keyToTest = (req.headers['x-gemini-api-key'] as string) || req.body.apiKey || process.env.GEMINI_API_KEY;
+  if (!keyToTest) {
+    return res.status(400).json({ valid: false, error: 'APIキーが入力されていません。' });
+  }
+
+  try {
+    const testAi = new GoogleGenAI({
+      apiKey: keyToTest,
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+    });
+    const result = await testAi.models.generateContent({
+      model: 'gemini-3.1-flash-lite',
+      contents: 'Respond with valid JSON: {"status": "ok"}',
+      config: { responseMimeType: 'application/json' },
+    });
+    res.json({ valid: true, model: 'gemini-3.1-flash-lite', sample: result.text });
+  } catch (err: any) {
+    console.error('API key verification error:', err);
+    res.status(400).json({
+      valid: false,
+      error: err.message || 'APIキーの検証に失敗しました。正しいGemini APIキーを入力してください。',
+    });
+  }
 });
 
 // Appraise single card image
 app.post('/api/appraise', async (req: Request, res: Response) => {
   const startTime = Date.now();
   try {
-    const { imageBase64, mimeType = 'image/jpeg', backImageBase64, backMimeType = 'image/jpeg' } = req.body;
+    const { imageBase64, mimeType = 'image/jpeg', backImageBase64, backMimeType = 'image/jpeg', userApiKey } = req.body;
+    const effectiveKey = (req.headers['x-gemini-api-key'] as string) || userApiKey || apiKey || process.env.GEMINI_API_KEY || '';
 
     if (!imageBase64) {
       return res.status(400).json({
@@ -574,22 +603,64 @@ app.post('/api/appraise', async (req: Request, res: Response) => {
       });
     }
 
-    // Clean up base64 prefix if present
-    const cleanFrontBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-    const cleanBackBase64 = backImageBase64 ? backImageBase64.replace(/^data:image\/\w+;base64,/, '') : null;
+    // Clean up base64 prefix properly
+    const cleanFrontBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+    const cleanBackBase64 = backImageBase64 ? (backImageBase64.includes(',') ? backImageBase64.split(',')[1] : backImageBase64) : null;
+
+    // Detect actual mime type
+    const frontMimeMatch = imageBase64.match(/^data:([^;]+);/);
+    const resolvedFrontMime = frontMimeMatch ? frontMimeMatch[1] : (mimeType || 'image/jpeg');
+    const backMimeMatch = backImageBase64?.match(/^data:([^;]+);/);
+    const resolvedBackMime = backMimeMatch ? backMimeMatch[1] : (backMimeType || 'image/jpeg');
+
+    // 1. Check if user clicked or uploaded a known sample card or SVG mockup
+    let sampleMatch: CardRecord | null = null;
+    let decodedText = '';
+    try {
+      if (imageBase64.includes('svg')) {
+        const b64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+        decodedText = Buffer.from(b64, 'base64').toString('utf-8');
+      }
+    } catch {}
+    const searchContext = (decodedText + ' ' + decodeURIComponent(imageBase64)).toLowerCase();
+
+    if (searchContext.includes('ピカチュウ') || searchContext.includes('pikachu') || searchContext.includes('025/165')) {
+      sampleMatch = CARDS_DATABASE.find((c) => c.id === 'card_pikachu_masterball') || CARDS_DATABASE[1];
+    } else if (searchContext.includes('ナンジャモ') || searchContext.includes('nanjamo') || searchContext.includes('096/071')) {
+      sampleMatch = CARDS_DATABASE.find((c) => c.id === 'card_nanjamo_sar') || CARDS_DATABASE[2];
+    } else if (searchContext.includes('ミモザ') || searchContext.includes('mimosa') || searchContext.includes('105/078')) {
+      sampleMatch = CARDS_DATABASE.find((c) => c.id === 'card_mimosa_sar') || CARDS_DATABASE[3];
+    } else if (searchContext.includes('ミュウツー') || searchContext.includes('mewtwo') || searchContext.includes('221/172')) {
+      sampleMatch = CARDS_DATABASE.find((c) => c.id === 'card_mewtwo_vstar_sar') || CARDS_DATABASE[4];
+    } else if (searchContext.includes('イーブイ') || searchContext.includes('eevee') || searchContext.includes('125/101')) {
+      sampleMatch = CARDS_DATABASE.find((c) => c.id === 'card_eevee_ar') || CARDS_DATABASE[5];
+    } else if (searchContext.includes('リザードン') || searchContext.includes('charizard') || searchContext.includes('134/108')) {
+      sampleMatch = CARDS_DATABASE.find((c) => c.id === 'card_charizard_sar') || CARDS_DATABASE[0];
+    }
 
     let aiResult: any = null;
 
-    if (ai) {
+    // 2. If it's not a sample card and effective key is present, run Gemini Vision AI
+    if (!sampleMatch && effectiveKey) {
+      const activeAi = new GoogleGenAI({
+        apiKey: effectiveKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
+
       const prompt = `あなたは世界基準のポケモンカード専門鑑定士（プロフェッショナルTCG鑑定士）です。
 提供されたポケモンカードの画像（表面、および裏面がある場合は裏面）を精密に解析し、JSON形式で判定結果を出力してください。
 
 【厳格な検証ルール】
 1. ポケモンカードであることを確認してください。もしカードでないもの、極端に不鮮明、カード全体が写っていない、暗すぎる、一部が隠れている等の場合は "isPokemonCard": false として理由を記述してください。
-2. カード名（日本語名）、カード番号（例: 134/108, 025/165, 096/071）、レアリティ（SAR, UR, AR, SR, HR, RR, R, U, C, ACE SPEC, PROMOなど）、収録拡張パック名（例: 黒炎の支配者, クレイバースト, ポケモンカード151, シャイニートレジャーex, ステラミラクル等）、シリーズ（スカーレット&バイオレット, ソード&シールド, サン&ムーン等）を正確に特定してください。
-3. カードタイプ（草/炎/水/雷/超/闘/悪/鋼/ドラゴン/無色/サポート/グッズ/スタジアム等）、HP、カード種別（たね/1進化/2進化/ex/V/VSTAR/かがやく等）、言語（日本語/英語等）、特殊加工（ホロ, レリーフ, マスターボールミラー等）、プロモ有無を判定してください。
-4. 確信度が低い場合は "candidates" に考えられる候補リスト（カード名、番号、レアリティ、パック名）を含めてください。
-5. 【カード状態査定】
+2. 画像に写っている実際のカードを正確に特定してください。リザードンexと決めつけず、画像に描かれた実際のポケモン名（例: ピカチュウ、ナンジャモ、ミモザ、ギラティナ、イーブイ、ミュウ、ルギア、サーナイト、テラパゴス等）を正確に読み取ってください。
+3. カード名（日本語名）、カード番号（例: 134/108, 025/165, 096/071）、レアリティ（SAR, UR, AR, SR, HR, RR, R, U, C, ACE SPEC, PROMOなど）、収録拡張パック名（例: 黒炎の支配者, クレイバースト, ポケモンカード151, シャイニートレジャーex, ステラミラクル, 超電ブレイカー等）、シリーズ（スカーレット&バイオレット, ソード&シールド, サン&ムーン等）を特定してください。
+4. カードタイプ（草/炎/水/雷/超/闘/悪/鋼/ドラゴン/無色/サポート/グッズ/スタジアム等）、HP、カード種別（たね/1進化/2進化/ex/V/VSTAR/かがやく等）、言語（日本語/英語等）、特殊加工（ホロ, レリーフ, マスターボールミラー等）、プロモ有無を判定してください。
+5. 確信度が低い場合は "candidates" に考えられる候補リスト（カード名、番号、レアリティ、パック名）を含めてください。
+6. 【カード状態査定】
    - 白かけ (edgeWear: "なし" | "微小" | "小" | "中" | "大")
    - 傷/スレ (scratches: "なし" | "極小" | "小" | "中" | "大")
    - へこみ (dents: "なし" | "微小" | "あり")
@@ -599,21 +670,21 @@ app.post('/api/appraise', async (req: Request, res: Response) => {
    - 状態総合ランク (conditionGrade: "S" | "A" | "B" | "C" | "D")
    - 表面状態コメント (surfaceCondition)
    - 裏面画像があるかないか (hasBackImage: ${Boolean(cleanBackBase64)})
-6. 日本のポケカ中古取引市場（メルカリ、ヤフオク、晴れる屋2、カードラッシュ、駿河屋、PSA相場）における現在の平均相場価格（円単位、整数）の推定値 "estimatedMarketPrice" を提示してください。
+7. 日本のポケカ中古取引市場（メルカリ、ヤフオク、晴れる屋2、カードラッシュ、駿河屋、PSA相場）における現在の平均相場価格（円単位、整数）の推定値 "estimatedMarketPrice" を提示してください。
 
-出力は必ず以下の有効なJSONのみを返してください（バッククォートmarkdownも可）:
+出力は必ず以下の有効なJSONのみを返してください:
 {
   "isPokemonCard": true,
-  "cardName": "カード名",
+  "cardName": "画像に写っている正確なカード名",
   "cardNumber": "000/000",
   "rarity": "SAR",
   "expansionSet": "収録パック名",
   "series": "スカーレット&バイオレット",
-  "cardType": "炎",
-  "hp": 330,
+  "cardType": "雷",
+  "hp": 60,
   "language": "日本語",
-  "specialFinish": "SAR加工",
-  "isAlternateArt": true,
+  "specialFinish": "通常ホロ / レリーフ / ミラー等",
+  "isAlternateArt": false,
   "isPromo": false,
   "confidenceScore": 95,
   "conditionGrade": "A",
@@ -632,7 +703,7 @@ app.post('/api/appraise', async (req: Request, res: Response) => {
       const contentsParts: any[] = [
         {
           inlineData: {
-            mimeType: mimeType.includes('png') ? 'image/png' : mimeType.includes('webp') ? 'image/webp' : 'image/jpeg',
+            mimeType: resolvedFrontMime.includes('png') ? 'image/png' : resolvedFrontMime.includes('webp') ? 'image/webp' : 'image/jpeg',
             data: cleanFrontBase64,
           },
         },
@@ -641,7 +712,7 @@ app.post('/api/appraise', async (req: Request, res: Response) => {
       if (cleanBackBase64) {
         contentsParts.push({
           inlineData: {
-            mimeType: backMimeType.includes('png') ? 'image/png' : backMimeType.includes('webp') ? 'image/webp' : 'image/jpeg',
+            mimeType: resolvedBackMime.includes('png') ? 'image/png' : resolvedBackMime.includes('webp') ? 'image/webp' : 'image/jpeg',
             data: cleanBackBase64,
           },
         });
@@ -649,19 +720,26 @@ app.post('/api/appraise', async (req: Request, res: Response) => {
 
       contentsParts.push({ text: prompt });
 
-      try {
-        const geminiRes = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: { parts: contentsParts },
-          config: {
-            responseMimeType: 'application/json',
-          },
-        });
+      // Robust candidate models in priority order
+      const candidateModels = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+      for (const m of candidateModels) {
+        try {
+          const geminiRes = await activeAi.models.generateContent({
+            model: m,
+            contents: contentsParts,
+            config: {
+              responseMimeType: 'application/json',
+            },
+          });
 
-        const rawText = geminiRes.text || '{}';
-        aiResult = JSON.parse(rawText);
-      } catch (err: any) {
-        console.error('Gemini vision appraisal error:', err);
+          const rawText = geminiRes.text || '{}';
+          aiResult = JSON.parse(rawText);
+          if (aiResult && (aiResult.cardName || aiResult.isPokemonCard === false)) {
+            break;
+          }
+        } catch (err: any) {
+          console.warn(`Gemini appraisal attempt failed with ${m}:`, err?.message || err);
+        }
       }
     }
 
@@ -674,7 +752,7 @@ app.post('/api/appraise', async (req: Request, res: Response) => {
         status: 'error',
       });
       return res.status(422).json({
-        error: aiResult.errorMessage || 'カードを認識できませんでした。カード全体が写っている、明るくピントの合った写真をアップロードしてください。',
+        error: aiResult.errorMessage || aiResult.reason || 'カードを認識できませんでした。カード全体が写っている、明るくピントの合った写真をアップロードしてください。',
         details: {
           isDarkOrBlur: true,
           reasons: [
@@ -686,38 +764,53 @@ app.post('/api/appraise', async (req: Request, res: Response) => {
       });
     }
 
-    // Fallback or blend if AI produced valid payload
+    // If neither AI nor sample matched
+    if (!aiResult?.cardName && !sampleMatch) {
+      if (!effectiveKey) {
+        return res.status(400).json({
+          error: 'Gemini APIキーが設定されていません。画面右上の【Gemini API設定】からAPIキー（無料）を設定してください。AIがあらゆるポケカを自動識別・鑑定します。',
+          needsApiKey: true,
+        });
+      } else {
+        return res.status(422).json({
+          error: 'カードを認識できませんでした。カード全体が写っている、明るくピントの合った写真をアップロードしてください。',
+        });
+      }
+    }
+
+    const defaultFallback = sampleMatch || CARDS_DATABASE[0];
+
     const parsedData = {
-      cardName: aiResult?.cardName || 'リザードンex',
-      cardNumber: aiResult?.cardNumber || '134/108',
-      rarity: aiResult?.rarity || 'SAR',
-      expansionSet: aiResult?.expansionSet || '黒炎の支配者',
-      series: aiResult?.series || 'スカーレット&バイオレット',
-      cardType: aiResult?.cardType || '悪',
-      hp: aiResult?.hp || 330,
+      cardName: aiResult?.cardName || defaultFallback.name,
+      cardNumber: aiResult?.cardNumber || defaultFallback.cardNumber,
+      rarity: aiResult?.rarity || defaultFallback.rarity,
+      expansionSet: aiResult?.expansionSet || defaultFallback.expansionSet,
+      series: aiResult?.series || defaultFallback.series,
+      cardType: aiResult?.cardType || defaultFallback.cardType,
+      hp: aiResult?.hp ?? (defaultFallback.hp || undefined),
       conditionGrade: aiResult?.conditionGrade || 'A',
       edgeWear: aiResult?.edgeWear || 'なし',
       scratches: aiResult?.scratches || '微小',
       dents: aiResult?.dents || 'なし',
       creases: aiResult?.creases || 'なし',
       stains: aiResult?.stains || 'なし',
-      centeringRatio: aiResult?.centeringRatio || '51:49',
-      notes: aiResult?.surfaceCondition || 'AI画像解析による状態判定です。',
-      confidenceScore: aiResult?.confidenceScore || 92,
-      estimatedPriceSuggestion: aiResult?.estimatedMarketPrice || 28500,
-      isAlternateArt: aiResult?.isAlternateArt ?? true,
-      isPromo: aiResult?.isPromo ?? false,
-      specialFinish: aiResult?.specialFinish || 'SAR特殊レリーフ',
+      centeringRatio: aiResult?.centeringRatio || '50:50',
+      notes: aiResult?.surfaceCondition || (sampleMatch ? `${sampleMatch.name}の鑑定結果です。` : 'AI画像解析による状態判定です。'),
+      confidenceScore: aiResult?.confidenceScore || (effectiveKey ? 95 : 90),
+      estimatedPriceSuggestion: aiResult?.estimatedMarketPrice || defaultFallback.baseMarketPrice,
+      isAlternateArt: aiResult?.isAlternateArt ?? defaultFallback.isAlternateArt,
+      isPromo: aiResult?.isPromo ?? defaultFallback.isPromo,
+      specialFinish: aiResult?.specialFinish || defaultFallback.specialFinish,
       language: aiResult?.language || '日本語',
       candidates: aiResult?.candidates || [],
-      frontImageUrl: `data:${mimeType};base64,${cleanFrontBase64.substring(0, 1000)}...`, // for store thumbnail
-      backImageUrl: cleanBackBase64 ? `data:${backMimeType};base64,${cleanBackBase64.substring(0, 1000)}...` : undefined,
+      frontImageUrl: `data:${resolvedFrontMime};base64,${cleanFrontBase64.substring(0, 1000)}...`,
+      backImageUrl: cleanBackBase64 ? `data:${resolvedBackMime};base64,${cleanBackBase64.substring(0, 1000)}...` : undefined,
       hasBackImage: Boolean(cleanBackBase64),
     };
 
     // Store raw images in memory/data URI for the session preview
-    const fullFrontUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:${mimeType};base64,${cleanFrontBase64}`;
-    const fullBackUrl = cleanBackBase64 ? (backImageBase64?.startsWith('data:') ? backImageBase64 : `data:${backMimeType};base64,${cleanBackBase64}`) : undefined;
+    const fullFrontUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:${resolvedFrontMime};base64,${cleanFrontBase64}`;
+    const fullBackUrl = cleanBackBase64 ? (backImageBase64?.startsWith('data:') ? backImageBase64 : `data:${resolvedBackMime};base64,${cleanBackBase64}`) : undefined;
 
     const appraisalRecord = evaluateCardAppraisal({
       ...parsedData,
@@ -750,7 +843,7 @@ app.post('/api/appraise', async (req: Request, res: Response) => {
       status: 'error',
     });
     res.status(500).json({
-      error: 'カードを認識できませんでした。カード全体が写っている、明るくピントの合った写真をアップロードしてください。',
+      error: error?.message || 'カードを認識できませんでした。カード全体が写っている、明るくピントの合った写真をアップロードしてください。',
     });
   }
 });
