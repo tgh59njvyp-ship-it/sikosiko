@@ -5,6 +5,7 @@ import {
   generateClientPriceHistory,
 } from './clientCatalog';
 import { getStoredApiKey } from './geminiKey';
+import { detectAndCropCard } from './cardCropper';
 
 // Local storage keys for client fallback mode (Vercel static deploy)
 const STORAGE_APPRAISALS_KEY = 'card_scanner_appraisals';
@@ -90,7 +91,16 @@ export async function appraiseCardImage(
     });
 
     if (res.ok) {
-      return await res.json();
+      const data = await res.json();
+      if (data.appraisal) {
+        try {
+          const cropRes = await detectAndCropCard(data.appraisal.frontImageUrl);
+          data.appraisal.croppedImageUrl = cropRes.croppedBase64;
+        } catch {
+          data.appraisal.croppedImageUrl = data.appraisal.frontImageUrl;
+        }
+      }
+      return data;
     } else {
       const errData = await res.json().catch(() => null);
       if (errData?.error) {
@@ -105,6 +115,13 @@ export async function appraiseCardImage(
     }
     console.warn('Backend API unreachable or static deploy, attempting client fallback:', err);
   }
+
+  // Auto-crop original image first for crisp presentation
+  let autoCroppedImage = imageBase64;
+  try {
+    const cropRes = await detectAndCropCard(imageBase64);
+    autoCroppedImage = cropRes.croppedBase64;
+  } catch {}
 
   // Client-side Gemini AI engine if key is set in browser
   if (userKey) {
@@ -169,6 +186,7 @@ export async function appraiseCardImage(
               estimatedPriceSuggestion: parsed.estimatedMarketPrice,
               confidenceScore: 95,
               frontImageUrl: imageBase64,
+              croppedImageUrl: autoCroppedImage,
               backImageUrl: backImageBase64,
               hasBackImage: Boolean(backImageBase64),
             });
@@ -235,6 +253,7 @@ export async function appraiseCardImage(
     estimatedPriceSuggestion: matchedSample.baseMarketPrice,
     confidenceScore: 92,
     frontImageUrl: imageBase64,
+    croppedImageUrl: autoCroppedImage,
     backImageUrl: backImageBase64,
     hasBackImage: Boolean(backImageBase64),
   });
@@ -269,7 +288,18 @@ export async function appraiseBatchImages(
     });
 
     if (res.ok) {
-      return await res.json();
+      const data = await res.json();
+      if (data.appraisals) {
+        for (const item of data.appraisals) {
+          try {
+            const cropRes = await detectAndCropCard(item.frontImageUrl);
+            item.croppedImageUrl = cropRes.croppedBase64;
+          } catch {
+            item.croppedImageUrl = item.frontImageUrl;
+          }
+        }
+      }
+      return data;
     }
   } catch (err) {
     console.warn('Backend API unreachable, using client fallback:', err);
@@ -279,6 +309,12 @@ export async function appraiseBatchImages(
   const results: AppraisalRecord[] = [];
   for (let i = 0; i < images.length; i++) {
     const sample = CLIENT_CARDS_DATABASE[i % CLIENT_CARDS_DATABASE.length];
+    let croppedImg = images[i].imageBase64;
+    try {
+      const cropRes = await detectAndCropCard(images[i].imageBase64);
+      croppedImg = cropRes.croppedBase64;
+    } catch {}
+
     const item = evaluateClientAppraisal({
       cardName: sample.name,
       cardNumber: sample.cardNumber,
@@ -291,6 +327,7 @@ export async function appraiseBatchImages(
       estimatedPriceSuggestion: sample.baseMarketPrice,
       confidenceScore: 92,
       frontImageUrl: images[i].imageBase64,
+      croppedImageUrl: croppedImg,
     });
     saveLocalAppraisal(item);
     results.push(item);

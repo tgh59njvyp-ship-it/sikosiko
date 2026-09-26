@@ -13,6 +13,7 @@ import { ResultScreen } from './components/ResultScreen';
 import { BatchResultScreen } from './components/BatchResultScreen';
 import { SearchScreen } from './components/SearchScreen';
 import { HistoryScreen } from './components/HistoryScreen';
+import { CollectionScreen } from './components/CollectionScreen';
 import { AccountScreen } from './components/AccountScreen';
 import { AdminScreen } from './components/AdminScreen';
 import { ErrorNotice } from './components/ErrorNotice';
@@ -277,6 +278,10 @@ export default function App() {
             }
             onToggleFavorite={handleToggleFavorite}
             onReAppraise={() => handleOpenScan('upload')}
+            onNavigateCollection={() => {
+              setCurrentTab('collection');
+              setAnalysisState('idle');
+            }}
           />
         ) : analysisState === 'batch_result' && batchAppraisals.length > 0 ? (
           <BatchResultScreen
@@ -284,6 +289,17 @@ export default function App() {
             grandTotal={batchGrandTotal}
             onSelectCard={handleSelectBatchCard}
             onReAppraise={() => handleOpenScan('batch')}
+            onNavigateCollection={() => {
+              setCurrentTab('collection');
+              setAnalysisState('idle');
+            }}
+          />
+        ) : currentTab === 'collection' ? (
+          <CollectionScreen
+            onOpenScan={() => handleOpenScan('upload')}
+            onSelectCardDetail={(name, num) => {
+              setCurrentTab('search');
+            }}
           />
         ) : currentTab === 'search' ? (
           <SearchScreen
@@ -318,6 +334,7 @@ export default function App() {
             onOpenScan={handleOpenScan}
             onSelectSample={handleSelectSample}
             onNavigateSearch={() => setCurrentTab('search')}
+            onNavigateCollection={() => setCurrentTab('collection')}
             geminiConfigured={geminiConfigured}
             onOpenGeminiModal={() => setIsGeminiModalOpen(true)}
           />

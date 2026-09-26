@@ -12,6 +12,7 @@ import {
   Zap,
   Activity,
   Key,
+  BookOpen,
 } from 'lucide-react';
 import { SAMPLE_CARDS, SampleCard } from '../lib/sampleCards';
 
@@ -19,6 +20,7 @@ interface HeroHomeProps {
   onOpenScan: (mode?: 'camera' | 'upload' | 'batch') => void;
   onSelectSample: (sample: SampleCard) => void;
   onNavigateSearch: () => void;
+  onNavigateCollection?: () => void;
   geminiConfigured?: boolean;
   onOpenGeminiModal?: () => void;
 }
@@ -27,6 +29,7 @@ export const HeroHome: React.FC<HeroHomeProps> = ({
   onOpenScan,
   onSelectSample,
   onNavigateSearch,
+  onNavigateCollection,
   geminiConfigured = false,
   onOpenGeminiModal,
 }) => {
@@ -61,16 +64,26 @@ export const HeroHome: React.FC<HeroHomeProps> = ({
             カードの写真をアップロードすると、カード名・番号・レアリティ・相場などをAIが自動解析します。
           </p>
 
-          {/* Primary CTA Button */}
-          <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+          {/* Primary CTA Buttons */}
+          <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
             <button
               onClick={() => onOpenScan('upload')}
-              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-red-600 via-red-500 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-extrabold text-lg shadow-xl shadow-red-500/30 hover:shadow-red-500/45 active:scale-95 transition-all flex items-center justify-center gap-3 cursor-pointer group"
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-red-600 via-red-500 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-extrabold text-base sm:text-lg shadow-xl shadow-red-500/30 hover:shadow-red-500/45 active:scale-95 transition-all flex items-center justify-center gap-3 cursor-pointer group"
             >
-              <Camera className="w-6 h-6 group-hover:rotate-12 transition-transform" />
+              <Camera className="w-5 h-5 sm:w-6 sm:h-6 group-hover:rotate-12 transition-transform" />
               <span>カードを査定する</span>
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform" />
             </button>
+
+            {onNavigateCollection && (
+              <button
+                onClick={onNavigateCollection}
+                className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-white dark:bg-slate-800 border-2 border-slate-300 dark:border-slate-700 hover:border-red-400 dark:hover:border-rose-500 text-slate-800 dark:text-slate-100 font-extrabold text-base shadow-md active:scale-95 transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+              >
+                <BookOpen className="w-5 h-5 text-red-600 dark:text-rose-400" />
+                <span>コレクションを開く</span>
+              </button>
+            )}
           </div>
 
           {/* 3 Entry Cards */}

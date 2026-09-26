@@ -79,6 +79,16 @@ export const Header: React.FC<HeaderProps> = ({
             ホーム
           </button>
           <button
+            onClick={() => setCurrentTab('collection')}
+            className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-all ${
+              currentTab === 'collection'
+                ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-rose-400 font-bold'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            コレクション
+          </button>
+          <button
             onClick={() => setCurrentTab('search')}
             className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-all ${
               currentTab === 'search'

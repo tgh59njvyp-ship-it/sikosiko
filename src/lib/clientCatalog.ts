@@ -233,6 +233,7 @@ export function evaluateClientAppraisal(data: {
   language?: string;
   candidates?: Array<{ name: string; cardNumber: string; rarity: string; set: string }>;
   frontImageUrl: string;
+  croppedImageUrl?: string;
   backImageUrl?: string;
 }): AppraisalRecord {
   const normName = (data.cardName || '').trim();
@@ -281,6 +282,7 @@ export function evaluateClientAppraisal(data: {
     isAlternateArt: data.isAlternateArt ?? (matched ? matched.isAlternateArt : false),
     isPromo: data.isPromo ?? (matched ? matched.isPromo : false),
     frontImageUrl: data.frontImageUrl,
+    croppedImageUrl: data.croppedImageUrl || data.frontImageUrl,
     backImageUrl: data.backImageUrl,
     estimatedPrice,
     priceRange: { min: minRange, max: maxRange },

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Layers,
   ArrowRight,
@@ -7,14 +7,23 @@ import {
   Share2,
   BookmarkCheck,
   ShieldCheck,
+  BookOpen,
+  CheckCircle2,
 } from 'lucide-react';
 import { AppraisalRecord } from '../types/card';
+import {
+  addBatchCardsToBinder,
+  getActiveBinderId,
+  getStoredBinders,
+} from '../lib/collectionStorage';
+import { playSleeveInsertSound, playHoloShimmerSound } from '../lib/soundFx';
 
 interface BatchResultScreenProps {
   appraisals: AppraisalRecord[];
   grandTotal: number;
   onSelectCard: (appraisal: AppraisalRecord) => void;
   onReAppraise: () => void;
+  onNavigateCollection?: () => void;
 }
 
 export const BatchResultScreen: React.FC<BatchResultScreenProps> = ({
@@ -22,7 +31,22 @@ export const BatchResultScreen: React.FC<BatchResultScreenProps> = ({
   grandTotal,
   onSelectCard,
   onReAppraise,
+  onNavigateCollection,
 }) => {
+  const [addedSuccessCount, setAddedSuccessCount] = useState<number | null>(null);
+
+  const handleAddAllToBinder = () => {
+    const binders = getStoredBinders();
+    const activeId = getActiveBinderId();
+    const targetBinder = binders.find((b) => b.id === activeId) || binders[0];
+    if (!targetBinder) return;
+
+    const res = addBatchCardsToBinder(targetBinder.id, appraisals);
+    playSleeveInsertSound();
+    playHoloShimmerSound();
+    setAddedSuccessCount(res.addedCount);
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 pb-24 md:pb-16">
       
@@ -38,14 +62,41 @@ export const BatchResultScreen: React.FC<BatchResultScreenProps> = ({
           </h1>
         </div>
 
-        <button
-          onClick={onReAppraise}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors self-start sm:self-auto"
-        >
-          <RotateCcw className="w-4 h-4" />
-          <span>新しく査定する</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={handleAddAllToBinder}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-red-500/25 active:scale-95 transition-all cursor-pointer"
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>全{appraisals.length}枚をバインダーに収納</span>
+          </button>
+
+          <button
+            onClick={onReAppraise}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>新しく査定</span>
+          </button>
+        </div>
       </div>
+
+      {addedSuccessCount !== null && (
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm font-bold rounded-2xl flex items-center justify-between animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{addedSuccessCount}枚のカードをコレクションバインダーに収納しました！</span>
+          </div>
+          {onNavigateCollection && (
+            <button
+              onClick={onNavigateCollection}
+              className="underline text-emerald-700 dark:text-emerald-300 font-bold ml-2 whitespace-nowrap"
+            >
+              バインダーを開く →
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Grand Total Estimated Price Card */}
       <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white shadow-2xl relative overflow-hidden">
@@ -60,7 +111,7 @@ export const BatchResultScreen: React.FC<BatchResultScreenProps> = ({
               ¥{grandTotal.toLocaleString()}
             </div>
             <p className="text-xs text-rose-100 mt-2">
-              ※本査定価格は参考値です。各カードをタップすると状態詳細や価格推移を確認できます。
+              ※本査定価格は参考値です。AIがカード枠を自動切り抜きし、コレクションに収納しやすい状態で管理されます。
             </p>
           </div>
         </div>

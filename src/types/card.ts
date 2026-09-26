@@ -22,6 +22,7 @@ export interface CardRecord {
   isAlternateArt: boolean;
   isPromo: boolean;
   imageUrl: string;
+  croppedImageUrl?: string;
   backImageUrl?: string;
   baseMarketPrice: number;
   conditionPrices: {
@@ -73,6 +74,7 @@ export interface AppraisalRecord {
   isAlternateArt: boolean;
   isPromo: boolean;
   frontImageUrl: string;
+  croppedImageUrl?: string;
   backImageUrl?: string;
   estimatedPrice: number;
   priceRange: { min: number; max: number };

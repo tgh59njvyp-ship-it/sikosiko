@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, ScanLine, Search, Clock, User as UserIcon } from 'lucide-react';
+import { Home, ScanLine, Search, Clock, BookOpen, User as UserIcon } from 'lucide-react';
 
 interface BottomNavProps {
   currentTab: string;
@@ -29,17 +29,17 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           <span className="text-[10px]">ホーム</span>
         </button>
 
-        {/* 検索 */}
+        {/* コレクション (バインダー) */}
         <button
-          onClick={() => setCurrentTab('search')}
+          onClick={() => setCurrentTab('collection')}
           className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-            currentTab === 'search'
+            currentTab === 'collection'
               ? 'text-red-600 dark:text-rose-400 font-bold'
               : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
           }`}
         >
-          <Search className="w-5 h-5 mb-0.5" />
-          <span className="text-[10px]">検索</span>
+          <BookOpen className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px]">コレクション</span>
         </button>
 
         {/* 査定 (中央の目立つボタン) */}
@@ -56,6 +56,19 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           </span>
         </div>
 
+        {/* 検索 */}
+        <button
+          onClick={() => setCurrentTab('search')}
+          className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
+            currentTab === 'search'
+              ? 'text-red-600 dark:text-rose-400 font-bold'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+          }`}
+        >
+          <Search className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px]">検索</span>
+        </button>
+
         {/* 履歴 */}
         <button
           onClick={() => setCurrentTab('history')}
@@ -67,19 +80,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         >
           <Clock className="w-5 h-5 mb-0.5" />
           <span className="text-[10px]">履歴</span>
-        </button>
-
-        {/* アカウント */}
-        <button
-          onClick={() => setCurrentTab('account')}
-          className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-            currentTab === 'account'
-              ? 'text-red-600 dark:text-rose-400 font-bold'
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
-          }`}
-        >
-          <UserIcon className="w-5 h-5 mb-0.5" />
-          <span className="text-[10px]">アカウント</span>
         </button>
 
       </div>
