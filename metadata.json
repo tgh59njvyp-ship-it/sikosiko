@@ -1,0 +1,6 @@
+{
+  "name": "CARD SCANNER",
+  "description": "ポケカを撮るだけ。AIがカードを解析し、カード名・番号・レアリティ・状態・推定相場を瞬時に査定するポケモンカード専門査定アプリ。",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
