@@ -6,40 +6,83 @@ import {
 } from './clientCatalog';
 import { getStoredApiKey } from './geminiKey';
 import { detectAndCropCard } from './cardCropper';
+import {
+  auth,
+  saveAppraisalToFirestore,
+  deleteAppraisalFromFirestore,
+  signInWithGoogle,
+  logOutFromFirebase,
+} from './firebase';
 
-// Local storage keys for client fallback mode (Vercel static deploy)
-const STORAGE_APPRAISALS_KEY = 'card_scanner_appraisals';
-const STORAGE_FAVORITES_KEY = 'card_scanner_favorites';
+// Local storage keys for persistent client storage
+export const STORAGE_APPRAISALS_KEY = 'card_scanner_appraisals_v2';
+export const STORAGE_FAVORITES_KEY = 'card_scanner_favorites_v2';
+export const APPRAISALS_UPDATED_EVENT = 'card_scanner_appraisals_updated';
 
-function getLocalAppraisals(): AppraisalRecord[] {
+export function getLocalAppraisals(): AppraisalRecord[] {
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_APPRAISALS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalAppraisal(item: AppraisalRecord) {
+  if (typeof window === 'undefined') return;
+  try {
+    const list = getLocalAppraisals();
+    // Prevent duplicate entries
+    const filtered = list.filter((a) => a.id !== item.id);
+    filtered.unshift(item);
+    localStorage.setItem(STORAGE_APPRAISALS_KEY, JSON.stringify(filtered));
+    window.dispatchEvent(new CustomEvent(APPRAISALS_UPDATED_EVENT, { detail: filtered }));
+
+    // Sync to Firestore if user is authenticated
+    if (auth.currentUser?.uid) {
+      saveAppraisalToFirestore(auth.currentUser.uid, item);
+    }
+  } catch (err) {
+    console.warn('Failed to save local appraisal:', err);
+  }
+}
+
+export function mergeCloudAppraisals(cloudItems: AppraisalRecord[]): AppraisalRecord[] {
+  const local = getLocalAppraisals();
+  const map = new Map<string, AppraisalRecord>();
+
+  // Add local first
+  local.forEach((item) => map.set(item.id, item));
+  // Merge cloud
+  cloudItems.forEach((item) => map.set(item.id, item));
+
+  const merged = Array.from(map.values()).sort(
+    (a, b) => new Date(b.appraisedAt).getTime() - new Date(a.appraisedAt).getTime()
+  );
+
+  try {
+    localStorage.setItem(STORAGE_APPRAISALS_KEY, JSON.stringify(merged));
+    window.dispatchEvent(new CustomEvent(APPRAISALS_UPDATED_EVENT, { detail: merged }));
+  } catch {}
+
+  return merged;
+}
+
+function getLocalFavorites(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_FAVORITES_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
 }
 
-function saveLocalAppraisal(item: AppraisalRecord) {
-  try {
-    const list = getLocalAppraisals();
-    list.unshift(item);
-    localStorage.setItem(STORAGE_APPRAISALS_KEY, JSON.stringify(list));
-  } catch (err) {
-    console.warn(err);
-  }
-}
-
-function getLocalFavorites(): string[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_FAVORITES_KEY);
-    return raw ? JSON.parse(raw) : ['card_charizard_sar', 'card_nanjamo_sar'];
-  } catch {
-    return ['card_charizard_sar', 'card_nanjamo_sar'];
-  }
-}
-
 function setLocalFavorites(favs: string[]) {
+  if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_FAVORITES_KEY, JSON.stringify(favs));
   } catch (err) {
@@ -99,6 +142,7 @@ export async function appraiseCardImage(
         } catch {
           data.appraisal.croppedImageUrl = data.appraisal.frontImageUrl;
         }
+        saveLocalAppraisal(data.appraisal);
       }
       return data;
     } else {
@@ -289,7 +333,7 @@ export async function appraiseBatchImages(
 
     if (res.ok) {
       const data = await res.json();
-      if (data.appraisals) {
+      if (data.appraisals && Array.isArray(data.appraisals)) {
         for (const item of data.appraisals) {
           try {
             const cropRes = await detectAndCropCard(item.frontImageUrl);
@@ -297,35 +341,141 @@ export async function appraiseBatchImages(
           } catch {
             item.croppedImageUrl = item.frontImageUrl;
           }
+          saveLocalAppraisal(item);
         }
+        return data;
       }
-      return data;
     }
   } catch (err) {
-    console.warn('Backend API unreachable, using client fallback:', err);
+    console.warn('Backend API unreachable, using client Gemini batch flow:', err);
   }
 
-  // Client-side fallback
+  // Client-side execution with Gemini Vision AI if userKey is available
   const results: AppraisalRecord[] = [];
+
+  if (userKey) {
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey: userKey });
+
+      for (let i = 0; i < images.length; i++) {
+        const item = images[i];
+        let autoCropped = item.imageBase64;
+        try {
+          const cropRes = await detectAndCropCard(item.imageBase64);
+          autoCropped = cropRes.croppedBase64;
+        } catch {}
+
+        const cleanFront = item.imageBase64.includes(',') ? item.imageBase64.split(',')[1] : item.imageBase64;
+        const frontMime = item.imageBase64.match(/^data:([^;]+);/)?.[1] || item.mimeType || 'image/jpeg';
+
+        let parsed: any = null;
+        for (const m of ['gemini-flash-latest', 'gemini-3.1-flash-lite']) {
+          try {
+            const res = await ai.models.generateContent({
+              model: m,
+              contents: [
+                {
+                  inlineData: {
+                    mimeType: frontMime.includes('png') ? 'image/png' : frontMime.includes('webp') ? 'image/webp' : 'image/jpeg',
+                    data: cleanFront,
+                  },
+                },
+                {
+                  text: `あなたは世界基準のポケモンカード専門鑑定士です。画像に写っている実際のカードを精密に特定しJSONで返してください。リザードンと決めつけず、画像に写っている実際のカード名、カード番号、レアリティを正確に特定してください。
+{
+  "isPokemonCard": true,
+  "cardName": "正確なカード名",
+  "cardNumber": "000/000",
+  "rarity": "SAR/AR/SR等",
+  "expansionSet": "収録パック名",
+  "series": "スカーレット&バイオレット",
+  "cardType": "タイプ",
+  "hp": 100,
+  "conditionGrade": "A",
+  "edgeWear": "なし",
+  "scratches": "微小",
+  "dents": "なし",
+  "creases": "なし",
+  "stains": "なし",
+  "centeringRatio": "50:50",
+  "estimatedMarketPrice": 20000
+}`,
+                },
+              ],
+              config: { responseMimeType: 'application/json' },
+            });
+            parsed = JSON.parse(res.text || '{}');
+            if (parsed?.cardName) break;
+          } catch {}
+        }
+
+        const appraisal = evaluateClientAppraisal({
+          cardName: parsed?.cardName || `カード #${i + 1}`,
+          cardNumber: parsed?.cardNumber || '---/---',
+          rarity: parsed?.rarity || '通常',
+          expansionSet: parsed?.expansionSet || '写真スキャン',
+          series: parsed?.series || 'ポケモンカードゲーム',
+          cardType: parsed?.cardType || '無色',
+          hp: parsed?.hp,
+          conditionGrade: parsed?.conditionGrade || (i === 0 ? 'S' : 'A'),
+          estimatedPriceSuggestion: parsed?.estimatedMarketPrice || 1200,
+          confidenceScore: parsed?.cardName ? 95 : 60,
+          frontImageUrl: item.imageBase64,
+          croppedImageUrl: autoCropped,
+        });
+
+        saveLocalAppraisal(appraisal);
+        results.push(appraisal);
+      }
+
+      const grandTotal = results.reduce((a, b) => a + b.estimatedPrice, 0);
+      return {
+        success: true,
+        appraisals: results,
+        grandTotal,
+        count: results.length,
+      };
+    } catch (clientBatchErr) {
+      console.warn('Client Gemini batch execution error:', clientBatchErr);
+    }
+  }
+
+  // Final fallback
   for (let i = 0; i < images.length; i++) {
-    const sample = CLIENT_CARDS_DATABASE[i % CLIENT_CARDS_DATABASE.length];
     let croppedImg = images[i].imageBase64;
     try {
       const cropRes = await detectAndCropCard(images[i].imageBase64);
       croppedImg = cropRes.croppedBase64;
     } catch {}
 
+    const str = decodeURIComponent(images[i].imageBase64).toLowerCase();
+    let matchedSample: CardRecord | null = null;
+    if (str.includes('ピカチュウ') || str.includes('pikachu') || str.includes('025/165')) {
+      matchedSample = CLIENT_CARDS_DATABASE.find((c) => c.id === 'card_pikachu_masterball') || CLIENT_CARDS_DATABASE[1];
+    } else if (str.includes('ナンジャモ') || str.includes('nanjamo') || str.includes('096/071')) {
+      matchedSample = CLIENT_CARDS_DATABASE.find((c) => c.id === 'card_nanjamo_sar') || CLIENT_CARDS_DATABASE[2];
+    } else if (str.includes('ミモザ') || str.includes('mimosa') || str.includes('105/078')) {
+      matchedSample = CLIENT_CARDS_DATABASE.find((c) => c.id === 'card_mimosa_sar') || CLIENT_CARDS_DATABASE[3];
+    } else if (str.includes('ミュウツー') || str.includes('mewtwo') || str.includes('221/172')) {
+      matchedSample = CLIENT_CARDS_DATABASE.find((c) => c.id === 'card_mewtwo_vstar_sar') || CLIENT_CARDS_DATABASE[4];
+    } else if (str.includes('イーブイ') || str.includes('eevee') || str.includes('125/101')) {
+      matchedSample = CLIENT_CARDS_DATABASE.find((c) => c.id === 'card_eevee_ar') || CLIENT_CARDS_DATABASE[5];
+    } else if (str.includes('リザードン') || str.includes('charizard') || str.includes('134/108')) {
+      matchedSample = CLIENT_CARDS_DATABASE.find((c) => c.id === 'card_charizard_sar') || CLIENT_CARDS_DATABASE[0];
+    }
+
     const item = evaluateClientAppraisal({
-      cardName: sample.name,
-      cardNumber: sample.cardNumber,
-      rarity: sample.rarity,
-      expansionSet: sample.expansionSet,
-      series: sample.series,
-      cardType: sample.cardType,
-      hp: sample.hp || undefined,
-      conditionGrade: i === 0 ? 'S' : i === 1 ? 'A' : 'B',
-      estimatedPriceSuggestion: sample.baseMarketPrice,
-      confidenceScore: 92,
+      cardName: matchedSample?.name || `カード #${i + 1}`,
+      cardNumber: matchedSample?.cardNumber || '---/---',
+      rarity: matchedSample?.rarity || '通常',
+      expansionSet: matchedSample?.expansionSet || '写真スキャン',
+      series: matchedSample?.series || 'ポケモンカードゲーム',
+      cardType: matchedSample?.cardType || '無色',
+      hp: matchedSample?.hp || undefined,
+      conditionGrade: i === 0 ? 'S' : 'A',
+      estimatedPriceSuggestion: matchedSample?.baseMarketPrice || 1000,
+      confidenceScore: matchedSample ? 90 : 50,
       frontImageUrl: images[i].imageBase64,
       croppedImageUrl: croppedImg,
     });
@@ -395,57 +545,40 @@ export async function fetchCardById(
 }
 
 export async function fetchAppraisals(): Promise<AppraisalRecord[]> {
+  const local = getLocalAppraisals();
+  if (local.length > 0) return local;
+
   try {
     const res = await fetch('/api/appraisals');
     if (res.ok) {
       const data = await res.json();
-      if (data.appraisals && data.appraisals.length > 0) return data.appraisals;
+      if (data.appraisals && Array.isArray(data.appraisals)) {
+        // Filter out dummy seeds if any
+        const valid = data.appraisals.filter((a: any) => !a.id?.startsWith('app_seed_'));
+        if (valid.length > 0) {
+          valid.forEach((item: any) => saveLocalAppraisal(item));
+          return valid;
+        }
+      }
     }
   } catch {
     // fallback
   }
 
-  const local = getLocalAppraisals();
-  if (local.length > 0) return local;
-
-  // Initial seed
-  const sample1 = CLIENT_CARDS_DATABASE[0];
-  const sample2 = CLIENT_CARDS_DATABASE[1];
-  return [
-    evaluateClientAppraisal({
-      cardName: sample1.name,
-      cardNumber: sample1.cardNumber,
-      rarity: sample1.rarity,
-      expansionSet: sample1.expansionSet,
-      series: sample1.series,
-      cardType: sample1.cardType,
-      hp: sample1.hp || undefined,
-      conditionGrade: 'A',
-      estimatedPriceSuggestion: sample1.baseMarketPrice,
-      frontImageUrl: sample1.imageUrl,
-    }),
-    evaluateClientAppraisal({
-      cardName: sample2.name,
-      cardNumber: sample2.cardNumber,
-      rarity: sample2.rarity,
-      expansionSet: sample2.expansionSet,
-      series: sample2.series,
-      cardType: sample2.cardType,
-      hp: sample2.hp || undefined,
-      conditionGrade: 'S',
-      estimatedPriceSuggestion: sample2.baseMarketPrice,
-      frontImageUrl: sample2.imageUrl,
-    }),
-  ];
+  return local;
 }
 
 export async function deleteAppraisal(id: string): Promise<boolean> {
+  if (auth.currentUser?.uid) {
+    deleteAppraisalFromFirestore(auth.currentUser.uid, id).catch(() => {});
+  }
   try {
     await fetch(`/api/appraisals/${id}`, { method: 'DELETE' });
   } catch {}
 
   const local = getLocalAppraisals().filter((a) => a.id !== id);
   localStorage.setItem(STORAGE_APPRAISALS_KEY, JSON.stringify(local));
+  window.dispatchEvent(new CustomEvent(APPRAISALS_UPDATED_EVENT, { detail: local }));
   return true;
 }
 
@@ -533,21 +666,19 @@ export async function loginUser(email?: string, name?: string): Promise<{ user: 
 }
 
 export async function loginGoogle(): Promise<{ user: User; token: string }> {
-  try {
-    const res = await fetch('/api/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (res.ok) return await res.json();
-  } catch {}
-
-  const user: User = {
-    id: `usr_google_${Date.now()}`,
-    name: 'Google アカウント ユーザー',
-    email: 'google.trainer@gmail.com',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-    role: 'user',
-    createdAt: new Date().toISOString(),
-  };
-  return { user, token: 'mock-google-token' };
+  const result = await signInWithGoogle();
+  if (result.success && result.user) {
+    const user: User = {
+      id: result.user.uid,
+      name: result.user.displayName || 'Google トレーナー',
+      email: result.user.email || '',
+      avatarUrl:
+        result.user.photoURL ||
+        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+      role: 'user',
+      createdAt: new Date().toISOString(),
+    };
+    return { user, token: 'firebase-google-auth' };
+  }
+  throw new Error(result.error || 'Googleログインに失敗しました');
 }

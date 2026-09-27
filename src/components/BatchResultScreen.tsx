@@ -133,7 +133,7 @@ export const BatchResultScreen: React.FC<BatchResultScreenProps> = ({
               {/* Card Thumbnail */}
               <div className="relative w-20 sm:w-24 aspect-[63/88] rounded-xl overflow-hidden bg-black shrink-0 border border-slate-200 dark:border-slate-700 group-hover:scale-105 transition-transform shadow-md">
                 <img
-                  src={card.frontImageUrl}
+                  src={card.croppedImageUrl || card.frontImageUrl}
                   alt={card.cardName}
                   className="w-full h-full object-cover"
                 />

@@ -18,6 +18,7 @@ import { AccountScreen } from './components/AccountScreen';
 import { AdminScreen } from './components/AdminScreen';
 import { ErrorNotice } from './components/ErrorNotice';
 import { GeminiKeyModal } from './components/GeminiKeyModal';
+import { MarketTicker } from './components/MarketTicker';
 
 import {
   AppraisalRecord,
@@ -32,9 +33,13 @@ import {
   fetchFavorites,
   toggleFavorite,
   fetchHealth,
+  mergeCloudAppraisals,
+  APPRAISALS_UPDATED_EVENT,
 } from './lib/api';
 import { getStoredApiKey } from './lib/geminiKey';
 import { SampleCard } from './lib/sampleCards';
+import { onAuthUserChanged, loadUserDataFromFirestore, subscribeUserBinders } from './lib/firebase';
+import { saveStoredBinders, mergeCloudBinders } from './lib/collectionStorage';
 
 export default function App() {
   // Navigation & Screen View State
@@ -102,6 +107,81 @@ export default function App() {
       setGeminiConfigured(false);
     }
   };
+
+  // Firebase Auth state listener
+  useEffect(() => {
+    let binderUnsub: (() => void) | null = null;
+
+    const unsubscribe = onAuthUserChanged(async (firebaseUser) => {
+      if (binderUnsub) {
+        binderUnsub();
+        binderUnsub = null;
+      }
+
+      if (firebaseUser) {
+        const loggedInUser: User = {
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName || 'Google トレーナー',
+          email: firebaseUser.email || '',
+          avatarUrl:
+            firebaseUser.photoURL ||
+            'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+          role: 'user',
+          createdAt: new Date().toISOString(),
+        };
+        setUser(loggedInUser);
+
+        try {
+          const cloudData = await loadUserDataFromFirestore(firebaseUser.uid);
+          if (cloudData.appraisals && cloudData.appraisals.length > 0) {
+            const merged = mergeCloudAppraisals(cloudData.appraisals);
+            setAppraisalsList(merged);
+          }
+          if (cloudData.binders && cloudData.binders.length > 0) {
+            mergeCloudBinders(cloudData.binders);
+          }
+
+          // Listen to real-time changes to binders from Firestore
+          const unsub = subscribeUserBinders(firebaseUser.uid, (realtimeBinders) => {
+            if (realtimeBinders && realtimeBinders.length > 0) {
+              mergeCloudBinders(realtimeBinders);
+            }
+          });
+          if (unsub) {
+            binderUnsub = unsub;
+          }
+        } catch (err) {
+          console.warn('Firebase data sync error:', err);
+        }
+      } else {
+        setUser({
+          id: 'usr_guest',
+          name: 'ゲストトレーナー',
+          email: 'guest@cardscanner.jp',
+          avatarUrl:
+            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+          role: 'user',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      if (binderUnsub) binderUnsub();
+    };
+  }, []);
+
+  // Listen to appraisals updates
+  useEffect(() => {
+    const handleAppraisalsUpdated = (e: any) => {
+      if (e.detail) {
+        setAppraisalsList(e.detail);
+      }
+    };
+    window.addEventListener(APPRAISALS_UPDATED_EVENT, handleAppraisalsUpdated);
+    return () => window.removeEventListener(APPRAISALS_UPDATED_EVENT, handleAppraisalsUpdated);
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -252,6 +332,9 @@ export default function App() {
         geminiConfigured={geminiConfigured}
         onOpenGeminiModal={() => setIsGeminiModalOpen(true)}
       />
+
+      {/* Realtime Market Ticker (Firebase Firestore Live Stream) */}
+      <MarketTicker />
 
       {/* Main Container */}
       <main className="flex-1 w-full">

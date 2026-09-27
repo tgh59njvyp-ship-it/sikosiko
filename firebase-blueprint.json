@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "user": {
+      "title": "User",
+      "description": "User profile with authentication and settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "createdAt"]
+    },
+    "appraisal": {
+      "title": "Appraisal",
+      "description": "AI-evaluated Pokémon card appraisal record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "cardName": { "type": "string" },
+        "cardNumber": { "type": "string" },
+        "rarity": { "type": "string" },
+        "expansionSet": { "type": "string" },
+        "series": { "type": "string" },
+        "cardType": { "type": "string" },
+        "conditionGrade": { "type": "string", "enum": ["S", "A", "B", "C", "D"] },
+        "estimatedPrice": { "type": "number" },
+        "frontImageUrl": { "type": "string" },
+        "croppedImageUrl": { "type": "string" },
+        "backImageUrl": { "type": "string" },
+        "appraisedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "cardName", "estimatedPrice", "conditionGrade", "appraisedAt"]
+    },
+    "binder": {
+      "title": "Binder",
+      "description": "User collection binder containing sleeved cards",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "coverColor": { "type": "string" },
+        "coverTheme": { "type": "string" },
+        "cards": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "cards", "createdAt", "updatedAt"]
+    },
+    "marketUpdate": {
+      "title": "MarketUpdate",
+      "description": "Real-time Pokémon card market trends and breaking price alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "cardName": { "type": "string" },
+        "currentPrice": { "type": "number" },
+        "priceChangePercent": { "type": "number" },
+        "description": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "title", "cardName", "currentPrice", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "User profile documents"
+    },
+    "/users/{userId}/appraisals/{appraisalId}": {
+      "schema": "appraisal",
+      "description": "User's private appraisal records"
+    },
+    "/users/{userId}/binders/{binderId}": {
+      "schema": "binder",
+      "description": "User's collection binders"
+    },
+    "/marketUpdates/{updateId}": {
+      "schema": "marketUpdate",
+      "description": "Public real-time TCG market price updates and trends"
+    }
+  }
+}

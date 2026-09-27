@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { CardRecord, User } from '../types/card';
 import { loginGoogle, loginUser } from '../lib/api';
+import { logOutFromFirebase } from '../lib/firebase';
 
 interface AccountScreenProps {
   user: User | null;
@@ -71,7 +72,10 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logOutFromFirebase();
+    } catch {}
     setUser(null);
   };
 

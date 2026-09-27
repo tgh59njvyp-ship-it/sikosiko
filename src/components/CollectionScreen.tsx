@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen,
   Sparkles,
@@ -50,6 +51,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
   const [activeBinderId, setCurrentActiveId] = useState<string>('');
   const [isBookOpen, setIsBookOpen] = useState<boolean>(true);
   const [currentPageSpread, setCurrentPageSpread] = useState<number>(0);
+  const [flipDirection, setFlipDirection] = useState<number>(1);
   const [viewMode, setViewMode] = useState<'book' | 'grid'>('book');
   const [selectedCardForModal, setSelectedCardForModal] = useState<BinderSlotCard | null>(null);
   const [isCreateBinderModalOpen, setIsCreateBinderModalOpen] = useState<boolean>(false);
@@ -93,6 +95,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
     if (!activeBinder) return;
     const maxSpreads = Math.ceil(activeBinder.totalPages / 2);
     if (currentPageSpread < maxSpreads - 1) {
+      setFlipDirection(1);
       playPageFlipSound();
       setCurrentPageSpread((prev) => prev + 1);
     }
@@ -100,6 +103,7 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
 
   const handlePrevPage = () => {
     if (currentPageSpread > 0) {
+      setFlipDirection(-1);
       playPageFlipSound();
       setCurrentPageSpread((prev) => prev - 1);
     }
@@ -112,6 +116,28 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
       playPageFlipSound();
     }
     setIsBookOpen(!isBookOpen);
+  };
+
+  // Framer Motion Page Flip Variants
+  const pageSpreadVariants = {
+    enter: (direction: number) => ({
+      rotateY: direction > 0 ? 32 : -32,
+      opacity: 0.15,
+      scale: 0.96,
+      transition: { duration: 0.45, ease: 'easeOut' as const },
+    }),
+    center: {
+      rotateY: 0,
+      opacity: 1,
+      scale: 1,
+      transition: { duration: 0.48, ease: 'easeOut' as const },
+    },
+    exit: (direction: number) => ({
+      rotateY: direction > 0 ? -32 : 32,
+      opacity: 0.15,
+      scale: 0.96,
+      transition: { duration: 0.4, ease: 'easeIn' as const },
+    }),
   };
 
   const handleCreateNewBinder = () => {
@@ -453,177 +479,217 @@ export const CollectionScreen: React.FC<CollectionScreenProps> = ({
           {/* 3D Binder Showcase Container */}
           <div
             onMouseMove={handleMouseMove}
-            className="perspective-1000 select-none"
+            style={{ perspective: 1400 }}
+            className="select-none min-h-[480px]"
           >
-            {!isBookOpen ? (
-              /* CLOSED BINDER COVER */
-              <div
-                onClick={handleToggleBookOpen}
-                className={`relative mx-auto max-w-md aspect-[3/4] rounded-3xl p-8 shadow-2xl border-4 cursor-pointer group transition-all transform hover:scale-[1.01] hover:shadow-red-500/15 bg-gradient-to-br ${themeStyle.leather}`}
-              >
-                {/* 3D Gold Corner Guards */}
-                <div className="absolute top-2 left-2 w-8 h-8 border-t-4 border-l-4 border-amber-400 rounded-tl-xl opacity-90"></div>
-                <div className="absolute top-2 right-2 w-8 h-8 border-t-4 border-r-4 border-amber-400 rounded-tr-xl opacity-90"></div>
-                <div className="absolute bottom-2 left-2 w-8 h-8 border-b-4 border-l-4 border-amber-400 rounded-bl-xl opacity-90"></div>
-                <div className="absolute bottom-2 right-2 w-8 h-8 border-b-4 border-r-4 border-amber-400 rounded-br-xl opacity-90"></div>
+            <AnimatePresence mode="wait">
+              {!isBookOpen ? (
+                /* CLOSED BINDER COVER */
+                <motion.div
+                  key="closed-cover"
+                  initial={{ rotateY: -75, opacity: 0, scale: 0.92 }}
+                  animate={{ rotateY: 0, opacity: 1, scale: 1 }}
+                  exit={{ rotateY: -80, opacity: 0, scale: 0.92 }}
+                  transition={{ duration: 0.55, ease: 'easeOut' as const }}
+                  onClick={handleToggleBookOpen}
+                  className={`relative mx-auto max-w-md aspect-[3/4] rounded-3xl p-8 shadow-2xl border-4 cursor-pointer group transition-all transform hover:scale-[1.02] bg-gradient-to-br ${themeStyle.leather}`}
+                  style={{ transformStyle: 'preserve-3d' }}
+                >
+                  {/* Spine Ribs Effect on Left Side */}
+                  <div className="absolute top-0 bottom-0 left-0 w-8 bg-black/40 border-r-2 border-amber-400/30 rounded-l-3xl flex flex-col justify-around py-8">
+                    {[0, 1, 2, 3].map((rib) => (
+                      <div key={rib} className="w-full h-3 bg-gradient-to-r from-amber-400/20 via-white/20 to-transparent"></div>
+                    ))}
+                  </div>
 
-                <div className="h-full flex flex-col items-center justify-between text-center relative z-10 py-6">
-                  {/* Top Crest */}
-                  <div className="w-16 h-16 rounded-full border-2 border-amber-400/80 bg-black/40 backdrop-blur-md flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                    <div className="w-8 h-8 rounded-full border border-amber-300 flex items-center justify-center">
-                      <div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div>
+                  {/* 3D Gold Corner Guards */}
+                  <div className="absolute top-2 left-2 w-8 h-8 border-t-4 border-l-4 border-amber-400 rounded-tl-xl opacity-90 shadow-md"></div>
+                  <div className="absolute top-2 right-2 w-8 h-8 border-t-4 border-r-4 border-amber-400 rounded-tr-xl opacity-90 shadow-md"></div>
+                  <div className="absolute bottom-2 left-2 w-8 h-8 border-b-4 border-l-4 border-amber-400 rounded-bl-xl opacity-90 shadow-md"></div>
+                  <div className="absolute bottom-2 right-2 w-8 h-8 border-b-4 border-r-4 border-amber-400 rounded-br-xl opacity-90 shadow-md"></div>
+
+                  <div className="h-full flex flex-col items-center justify-between text-center relative z-10 py-6 pl-4">
+                    {/* Top Crest */}
+                    <div className="w-20 h-20 rounded-full border-2 border-amber-400/80 bg-black/50 backdrop-blur-md flex items-center justify-center shadow-xl group-hover:scale-110 group-hover:rotate-6 transition-transform">
+                      <div className="w-10 h-10 rounded-full border border-amber-300 flex items-center justify-center bg-gradient-to-tr from-amber-500/20 to-transparent">
+                        <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
+                      </div>
+                    </div>
+
+                    {/* Embossed Gold Title */}
+                    <div className="space-y-2 px-2">
+                      <span className="text-[11px] uppercase font-mono font-black tracking-widest text-amber-300 drop-shadow-sm block">
+                        TCG MASTER BINDER
+                      </span>
+                      <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-md">
+                        {activeBinder?.title}
+                      </h2>
+                      <p className="text-xs text-slate-300 font-semibold">
+                        {activeBinder?.subtitle || 'ポケモンカードAI査定コレクション'}
+                      </p>
+                    </div>
+
+                    {/* Footer Tag */}
+                    <div className="space-y-3">
+                      <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-black/70 border border-amber-400/50 text-amber-300 text-xs font-black shadow-lg">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>収納 {activeBinder?.cards?.length || 0}枚 · 総額 ¥{activeBinder?.cards?.reduce((sum, c) => sum + c.estimatedPrice, 0).toLocaleString()}</span>
+                      </div>
+                      <p className="text-xs text-amber-200 font-bold flex items-center justify-center gap-1.5 group-hover:translate-x-1 transition-transform">
+                        <span>タップしてバインダーを開く</span>
+                        <ArrowRight className="w-4 h-4 animate-bounce" />
+                      </p>
                     </div>
                   </div>
-
-                  {/* Embossed Gold Title */}
-                  <div className="space-y-2">
-                    <span className="text-[10px] uppercase font-mono tracking-widest text-amber-300/80 block">
-                      OFFICIAL CARD SCANNER BINDER
-                    </span>
-                    <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-md">
-                      {activeBinder?.title}
-                    </h2>
-                    <p className="text-xs text-slate-300 font-medium">
-                      {activeBinder?.subtitle || 'ポケモンカードAI査定コレクション'}
-                    </p>
-                  </div>
-
-                  {/* Footer Tag */}
-                  <div className="space-y-3">
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-black/60 border border-amber-400/40 text-amber-300 text-xs font-black">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>収納 {activeBinder?.cards?.length || 0}枚 · 総額 ¥{activeBinder?.cards?.reduce((sum, c) => sum + c.estimatedPrice, 0).toLocaleString()}</span>
-                    </div>
-                    <p className="text-xs text-amber-200/80 font-bold flex items-center justify-center gap-1.5">
-                      <span>タップしてバインダーを開く</span>
-                      <ArrowRight className="w-4 h-4 animate-pulse" />
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              /* OPENED BINDER SPREAD (2-Page Spread with Center Ring Binder Clamps & 9-Pocket Sleeves) */
-              <div className="relative rounded-3xl p-3 sm:p-6 lg:p-8 bg-slate-900 dark:bg-slate-950 border-4 border-slate-700 dark:border-slate-800 shadow-2xl overflow-hidden">
-                
-                {/* Empty State Banner Tip */}
-                {(!activeBinder?.cards || activeBinder.cards.length === 0) && (
-                  <div className="mb-4 p-3.5 bg-red-950/60 border border-red-800/80 rounded-2xl text-center flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-bold text-red-200 animate-fadeIn">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span>現在バインダーは空です。スロット（+）または「カードを査定して追加」から撮影したカードを収納できます！</span>
-                    </div>
-                    <button
-                      onClick={onOpenScan}
-                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-sm whitespace-nowrap cursor-pointer"
-                    >
-                      <Camera className="w-3.5 h-3.5" />
-                      <span>今すぐ査定する</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* Center 3-Ring Binder Spine & Metal Ring Clamps */}
-                <div className="hidden md:flex absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-10 flex-col items-center justify-around z-20 pointer-events-none">
-                  {[0, 1, 2].map((ringIdx) => (
-                    <div key={ringIdx} className="w-6 h-12 rounded-full border-4 border-slate-300 shadow-xl bg-gradient-to-r from-slate-400 via-slate-100 to-slate-500 opacity-90 -rotate-3"></div>
-                  ))}
-                  <div className="absolute top-0 bottom-0 w-1 bg-black/90 shadow-2xl"></div>
-                </div>
-
-                {/* 2-Page Grid Spread */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+                </motion.div>
+              ) : (
+                /* OPENED BINDER SPREAD (2-Page Spread with Center Ring Binder Clamps & 9-Pocket Sleeves) */
+                <motion.div
+                  key="opened-binder"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.4 }}
+                  className="relative rounded-3xl p-3 sm:p-6 lg:p-8 bg-slate-900 dark:bg-slate-950 border-4 border-slate-700 dark:border-slate-800 shadow-2xl overflow-hidden"
+                >
                   
-                  {/* Left Page (9-Pocket Sleeve) */}
-                  <div className="bg-slate-950/90 rounded-2xl p-3 sm:p-4 border border-slate-800 shadow-inner relative">
-                    <div className="flex items-center justify-between mb-3 text-xs text-slate-400 font-mono font-bold px-1">
-                      <span className="text-red-400 font-black">PAGE {leftPageIndex + 1}</span>
-                      <span>9-POCKET SLEEVE</span>
+                  {/* Empty State Banner Tip */}
+                  {(!activeBinder?.cards || activeBinder.cards.length === 0) && (
+                    <div className="mb-4 p-3.5 bg-red-950/60 border border-red-800/80 rounded-2xl text-center flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-bold text-red-200 animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>現在バインダーは空です。スロット（+）または「カードを査定して追加」から撮影したカードを収納できます！</span>
+                      </div>
+                      <button
+                        onClick={onOpenScan}
+                        className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-sm whitespace-nowrap cursor-pointer"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>今すぐ査定する</span>
+                      </button>
                     </div>
+                  )}
 
-                    <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5">
-                      {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((slotIdx) => {
-                        const card = leftPageCards.find((c) => c.slotIndex === slotIdx);
-                        return (
-                          <PocketSlot
-                            key={`left_${slotIdx}`}
-                            slotIndex={slotIdx}
-                            pageIndex={leftPageIndex}
-                            card={card}
-                            mouseHoloPos={mouseHoloPos}
-                            onCardClick={(c) => {
-                              playHoloShimmerSound();
-                              setSelectedCardForModal(c);
-                            }}
-                            onEmptyClick={() => onOpenScan()}
-                          />
-                        );
-                      })}
-                    </div>
+                  {/* Center 3-Ring Binder Spine & Metal Ring Clamps */}
+                  <div className="hidden md:flex absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-10 flex-col items-center justify-around z-20 pointer-events-none">
+                    {[0, 1, 2].map((ringIdx) => (
+                      <div key={ringIdx} className="w-6 h-12 rounded-full border-4 border-slate-300 shadow-xl bg-gradient-to-r from-slate-400 via-slate-100 to-slate-500 opacity-90 -rotate-3"></div>
+                    ))}
+                    <div className="absolute top-0 bottom-0 w-1 bg-black/90 shadow-2xl"></div>
                   </div>
 
-                  {/* Right Page (9-Pocket Sleeve) */}
-                  <div className="bg-slate-950/90 rounded-2xl p-3 sm:p-4 border border-slate-800 shadow-inner relative">
-                    <div className="flex items-center justify-between mb-3 text-xs text-slate-400 font-mono font-bold px-1">
-                      <span className="text-red-400 font-black">PAGE {rightPageIndex + 1}</span>
-                      <span>9-POCKET SLEEVE</span>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5">
-                      {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((slotIdx) => {
-                        const card = rightPageCards.find((c) => c.slotIndex === slotIdx);
-                        return (
-                          <PocketSlot
-                            key={`right_${slotIdx}`}
-                            slotIndex={slotIdx}
-                            pageIndex={rightPageIndex}
-                            card={card}
-                            mouseHoloPos={mouseHoloPos}
-                            onCardClick={(c) => {
-                              playHoloShimmerSound();
-                              setSelectedCardForModal(c);
-                            }}
-                            onEmptyClick={() => onOpenScan()}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Page Flip Navigation Buttons */}
-                <div className="flex items-center justify-between pt-6 border-t border-slate-800/80 mt-6">
-                  <button
-                    onClick={handlePrevPage}
-                    disabled={currentPageSpread === 0}
-                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-black transition-all cursor-pointer shadow-md"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    <span>前のページ</span>
-                  </button>
-
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={handleAddPage}
-                      className="px-3.5 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-200 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  {/* 2-Page Grid Spread with Page Flip Animated Transition */}
+                  <AnimatePresence custom={flipDirection} mode="wait">
+                    <motion.div
+                      key={`spread-${currentPageSpread}-${activeBinderId}`}
+                      custom={flipDirection}
+                      variants={pageSpreadVariants}
+                      initial="enter"
+                      animate="center"
+                      exit="exit"
+                      style={{ transformStyle: 'preserve-3d' }}
+                      className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8"
                     >
-                      <Plus className="w-3.5 h-3.5 text-amber-400" />
-                      <span>ページを追加</span>
-                    </button>
+                      {/* Left Page (9-Pocket Sleeve) */}
+                      <div className="bg-slate-950/90 rounded-2xl p-3 sm:p-4 border border-slate-800 shadow-inner relative overflow-hidden">
+                        {/* Page Edge Highlight */}
+                        <div className="absolute top-0 right-0 bottom-0 w-3 bg-gradient-to-l from-black/60 to-transparent pointer-events-none"></div>
+
+                        <div className="flex items-center justify-between mb-3 text-xs text-slate-400 font-mono font-bold px-1">
+                          <span className="text-red-400 font-black">PAGE {leftPageIndex + 1}</span>
+                          <span className="text-[10px] text-slate-500">9-POCKET VINYL SLEEVE</span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5">
+                          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((slotIdx) => {
+                            const card = leftPageCards.find((c) => c.slotIndex === slotIdx);
+                            return (
+                              <PocketSlot
+                                key={`left_${slotIdx}`}
+                                slotIndex={slotIdx}
+                                pageIndex={leftPageIndex}
+                                card={card}
+                                mouseHoloPos={mouseHoloPos}
+                                onCardClick={(c) => {
+                                  playHoloShimmerSound();
+                                  setSelectedCardForModal(c);
+                                }}
+                                onEmptyClick={() => onOpenScan()}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Right Page (9-Pocket Sleeve) */}
+                      <div className="bg-slate-950/90 rounded-2xl p-3 sm:p-4 border border-slate-800 shadow-inner relative overflow-hidden">
+                        {/* Page Edge Highlight */}
+                        <div className="absolute top-0 left-0 bottom-0 w-3 bg-gradient-to-r from-black/60 to-transparent pointer-events-none"></div>
+
+                        <div className="flex items-center justify-between mb-3 text-xs text-slate-400 font-mono font-bold px-1">
+                          <span className="text-red-400 font-black">PAGE {rightPageIndex + 1}</span>
+                          <span className="text-[10px] text-slate-500">9-POCKET VINYL SLEEVE</span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5">
+                          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((slotIdx) => {
+                            const card = rightPageCards.find((c) => c.slotIndex === slotIdx);
+                            return (
+                              <PocketSlot
+                                key={`right_${slotIdx}`}
+                                slotIndex={slotIdx}
+                                pageIndex={rightPageIndex}
+                                card={card}
+                                mouseHoloPos={mouseHoloPos}
+                                onCardClick={(c) => {
+                                  playHoloShimmerSound();
+                                  setSelectedCardForModal(c);
+                                }}
+                                onEmptyClick={() => onOpenScan()}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </motion.div>
+                  </AnimatePresence>
+
+                  {/* Page Flip Navigation Buttons & Fast Jump */}
+                  <div className="flex items-center justify-between pt-6 border-t border-slate-800/80 mt-6">
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handlePrevPage}
+                      disabled={currentPageSpread === 0}
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-black transition-all cursor-pointer shadow-md"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                      <span>前のページをめくる</span>
+                    </motion.button>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleAddPage}
+                        className="px-3.5 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-200 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-amber-400" />
+                        <span>ページを追加</span>
+                      </button>
+                    </div>
+
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleNextPage}
+                      disabled={currentPageSpread >= Math.ceil((activeBinder?.totalPages || 4) / 2) - 1}
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-black transition-all cursor-pointer shadow-md"
+                    >
+                      <span>次のページをめくる</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </motion.button>
                   </div>
 
-                  <button
-                    onClick={handleNextPage}
-                    disabled={currentPageSpread >= Math.ceil((activeBinder?.totalPages || 4) / 2) - 1}
-                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-white text-xs font-black transition-all cursor-pointer shadow-md"
-                  >
-                    <span>次のページ</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-
-              </div>
-            )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
         </div>
@@ -919,10 +985,12 @@ const PocketSlot: React.FC<PocketSlotProps> = ({
   const [isHovered, setIsHovered] = useState<boolean>(false);
 
   return (
-    <div
+    <motion.div
+      whileHover={{ scale: 1.05, y: -3, transition: { type: 'spring', stiffness: 350, damping: 25 } }}
+      whileTap={{ scale: 0.97 }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="relative aspect-[63/88] rounded-xl overflow-hidden bg-slate-900 border-2 border-slate-700/80 shadow-lg group cursor-pointer transition-transform hover:scale-[1.03]"
+      className="relative aspect-[63/88] rounded-xl overflow-hidden bg-slate-900 border-2 border-slate-700/80 shadow-lg group cursor-pointer"
     >
       {/* Glossy Plastic Sleeve Sheen Over Pocket */}
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-white/10 via-transparent to-white/15 z-10"></div>
@@ -984,6 +1052,6 @@ const PocketSlot: React.FC<PocketSlotProps> = ({
           </span>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };

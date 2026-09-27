@@ -5,6 +5,7 @@
  */
 
 import { AppraisalRecord } from '../types/card';
+import { auth, saveBinderToFirestore, deleteBinderFromFirestore } from './firebase';
 
 export type BinderCoverColor = 'crimson' | 'obsidian' | 'sapphire' | 'emerald' | 'amber' | 'amethyst';
 export type BinderCoverTheme = 'pokeball' | 'luxury_leather' | 'holo_grid' | 'vintage';
@@ -96,6 +97,13 @@ export function saveStoredBinders(binders: CollectionBinder[]) {
   try {
     localStorage.setItem(STORAGE_BINDERS_KEY, JSON.stringify(binders));
     window.dispatchEvent(new CustomEvent(COLLECTION_UPDATED_EVENT, { detail: binders }));
+
+    // Sync to Firestore if authenticated
+    if (auth.currentUser?.uid) {
+      for (const b of binders) {
+        saveBinderToFirestore(auth.currentUser.uid, b).catch(() => {});
+      }
+    }
   } catch (err) {
     console.warn('Failed to save binders:', err);
   }
@@ -160,6 +168,49 @@ export function createNewBinder(
 }
 
 /**
+ * Merge Cloud Binders with Local Binders to prevent data loss and keep user collections in sync
+ */
+export function mergeCloudBinders(cloudBinders: CollectionBinder[]): CollectionBinder[] {
+  if (!cloudBinders || cloudBinders.length === 0) return getStoredBinders();
+
+  const localBinders = getStoredBinders();
+  const binderMap = new Map<string, CollectionBinder>();
+
+  // Add local binders
+  localBinders.forEach((b) => binderMap.set(b.id, b));
+
+  // Merge cloud binders
+  cloudBinders.forEach((cb) => {
+    const existing = binderMap.get(cb.id);
+    if (!existing) {
+      binderMap.set(cb.id, cb);
+    } else {
+      // Merge cards
+      const cardMap = new Map<string, BinderSlotCard>();
+      (existing.cards || []).forEach((c) => cardMap.set(`${c.pageIndex}_${c.slotIndex}`, c));
+      (cb.cards || []).forEach((c) => cardMap.set(`${c.pageIndex}_${c.slotIndex}`, c));
+
+      binderMap.set(cb.id, {
+        ...existing,
+        ...cb,
+        totalPages: Math.max(existing.totalPages, cb.totalPages || 4),
+        cards: Array.from(cardMap.values()),
+        updatedAt: new Date(
+          Math.max(
+            new Date(existing.updatedAt || 0).getTime(),
+            new Date(cb.updatedAt || 0).getTime()
+          )
+        ).toISOString(),
+      });
+    }
+  });
+
+  const merged = Array.from(binderMap.values());
+  saveStoredBinders(merged);
+  return merged;
+}
+
+/**
  * Delete a binder
  */
 export function deleteBinder(binderId: string): boolean {
@@ -167,6 +218,9 @@ export function deleteBinder(binderId: string): boolean {
   const filtered = binders.filter((b) => b.id !== binderId);
   if (filtered.length === 0) return false; // Prevent deleting all binders
   saveStoredBinders(filtered);
+  if (auth.currentUser?.uid) {
+    deleteBinderFromFirestore(auth.currentUser.uid, binderId).catch(() => {});
+  }
   if (getActiveBinderId() === binderId) {
     setActiveBinderId(filtered[0].id);
   }
