@@ -18,10 +18,13 @@ import {
   BookOpen,
   Crop,
   Check,
+  HelpCircle,
 } from 'lucide-react';
 import { AppraisalRecord, PriceHistoryPoint } from '../types/card';
 import { AddToBinderModal } from './AddToBinderModal';
 import { CardCropModal } from './CardCropModal';
+import { ConditionGuideModal } from './ConditionGuideModal';
+import { AppraisalFeedbackModal } from './AppraisalFeedbackModal';
 import { CollectionBinder } from '../lib/collectionStorage';
 
 interface ResultScreenProps {
@@ -51,6 +54,9 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
   // Collection & Auto-crop Modal States
   const [isAddToBinderOpen, setIsAddToBinderOpen] = useState(false);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [isConditionGuideOpen, setIsConditionGuideOpen] = useState(false);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [feedbackSuccessMessage, setFeedbackSuccessMessage] = useState<string | null>(null);
   const [useCroppedView, setUseCroppedView] = useState(true);
   const [currentCroppedImg, setCurrentCroppedImg] = useState<string>(
     appraisal.croppedImageUrl || appraisal.frontImageUrl
@@ -146,6 +152,25 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
             </span>
           </button>
 
+          {/* Condition Guide Trigger */}
+          <button
+            onClick={() => setIsConditionGuideOpen(true)}
+            className="p-2 sm:px-3 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+          >
+            <HelpCircle className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className="hidden sm:inline">状態判定ガイド</span>
+          </button>
+
+          {/* Feedback / Report Incorrect Appraisal Trigger */}
+          <button
+            onClick={() => setIsFeedbackModalOpen(true)}
+            title="査定結果が正しくない場合の報告"
+            className="p-2 sm:px-3 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+          >
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className="hidden sm:inline">誤認識を報告</span>
+          </button>
+
           {/* Share button */}
           <button
             onClick={handleShare}
@@ -156,6 +181,13 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           </button>
         </div>
       </div>
+
+      {feedbackSuccessMessage && (
+        <div className="p-3.5 bg-amber-50 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-100 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fadeIn shadow-sm">
+          <CheckCircle2 className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span>{feedbackSuccessMessage}</span>
+        </div>
+      )}
 
       {addedToBinderSuccess && (
         <div className="p-3 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold rounded-2xl flex items-center justify-between">
@@ -363,13 +395,23 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
             </div>
 
             {/* Reference Market Notice */}
-            <div className="mt-4 pt-4 border-t border-red-200/60 dark:border-slate-700 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed space-y-1">
-              <p className="flex items-center gap-1.5">
-                <Info className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                <span>
-                  本サービスの査定価格は参考値であり、実際の買取価格を保証するものではありません。
-                </span>
-              </p>
+            <div className="mt-4 pt-4 border-t border-red-200/60 dark:border-slate-700 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed space-y-1.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                  <span>
+                    本サービスの査定価格は参考値であり、実際の買取価格を保証するものではありません。
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsFeedbackModalOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline cursor-pointer shrink-0"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                  <span>査定結果が正しくない場合はこちら</span>
+                </button>
+              </div>
               <p className="text-[10px] text-slate-400 dark:text-slate-500">
                 現在の市場相場データ（メルカリ・ヤフオク・専門店買取表）をもとに自動算出しています。
               </p>
@@ -455,9 +497,18 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
                 </p>
               </div>
 
-              {/* Status Grade Badge */}
-              <div className={`px-3 py-1 rounded-xl text-xs font-black shadow-sm ${gradeInfo.bg}`}>
-                Rank {appraisal.conditionGrade}
+              {/* Status Grade Badge & Guide Trigger */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsConditionGuideOpen(true)}
+                  className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-700/80 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200 dark:border-slate-600"
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
+                  <span>判定ガイド</span>
+                </button>
+                <div className={`px-3 py-1 rounded-xl text-xs font-black shadow-sm ${gradeInfo.bg}`}>
+                  Rank {appraisal.conditionGrade}
+                </div>
               </div>
             </div>
 
@@ -701,6 +752,23 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
         onApplyCrop={(newCrop) => {
           setCurrentCroppedImg(newCrop);
           setUseCroppedView(true);
+        }}
+      />
+
+      {/* Condition Grading Guide Modal */}
+      <ConditionGuideModal
+        isOpen={isConditionGuideOpen}
+        onClose={() => setIsConditionGuideOpen(false)}
+      />
+
+      {/* Appraisal Feedback & Report Modal */}
+      <AppraisalFeedbackModal
+        isOpen={isFeedbackModalOpen}
+        onClose={() => setIsFeedbackModalOpen(false)}
+        appraisal={appraisal}
+        onSubmitSuccess={(msg) => {
+          setFeedbackSuccessMessage(msg);
+          setTimeout(() => setFeedbackSuccessMessage(null), 6000);
         }}
       />
 

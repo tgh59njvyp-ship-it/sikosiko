@@ -5,6 +5,8 @@
  * and generates a high-definition cropped card portrait for the collection binder.
  */
 
+import { preprocessCardImage } from './imagePreprocessor';
+
 export interface CropRect {
   x: number; // 0 to 1 normalized
   y: number; // 0 to 1 normalized
@@ -189,7 +191,12 @@ export async function detectAndCropCard(imageBase64: string): Promise<AutoCropRe
 
     outCtx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, targetOutputWidth, targetOutputHeight);
 
-    const croppedBase64 = cropCanvas.toDataURL('image/jpeg', 0.92);
+    const rawCropped = cropCanvas.toDataURL('image/jpeg', 0.92);
+    let croppedBase64 = rawCropped;
+    try {
+      const prep = await preprocessCardImage(rawCropped, { autoOptimize: true });
+      croppedBase64 = prep.processedBase64;
+    } catch {}
 
     return {
       croppedBase64,

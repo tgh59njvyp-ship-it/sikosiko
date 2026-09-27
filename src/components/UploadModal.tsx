@@ -16,7 +16,10 @@ import {
   ChevronRight,
   Eye,
   Key,
+  HelpCircle,
 } from 'lucide-react';
+import { ConditionGuideModal } from './ConditionGuideModal';
+import { preprocessCardImage, AutoOptimizeStats } from '../lib/imagePreprocessor';
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -42,11 +45,15 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [backImage, setBackImage] = useState<string | null>(null);
   const [batchImages, setBatchImages] = useState<string[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isConditionGuideOpen, setIsConditionGuideOpen] = useState(false);
 
-  // Preprocessing toggles
+  // Preprocessing toggles & stats
   const [autoEnhance, setAutoEnhance] = useState(true);
-  const [autoCropCorners, setAutoCropCorners] = useState(true);
-  const [brightness, setBrightness] = useState(100); // 80 - 140
+  const [brightness, setBrightness] = useState(100); // 50 - 150
+  const [contrast, setContrast] = useState(100); // 50 - 150
+  const [sharpness, setSharpness] = useState(30); // 0 - 100
+  const [showManualSliders, setShowManualSliders] = useState(false);
+  const [preprocessStats, setPreprocessStats] = useState<AutoOptimizeStats | null>(null);
 
   // Camera stream
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -95,49 +102,30 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Process & convert image via canvas (auto contrast / perspective crop effect)
+  // Process & convert image via AI preprocessor (auto brightness/contrast & unsharp masking)
   const processImageToDataUrl = (file: File): Promise<string> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-
-          // Max dimension 1400px to ensure quick API upload
-          const maxDim = 1400;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            if (autoEnhance) {
-              ctx.filter = `contrast(1.08) brightness(${brightness / 100})`;
-            }
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.88));
-          } else {
-            resolve(e.target?.result as string);
-          }
-        };
-        img.src = e.target?.result as string;
+      reader.onload = async (e) => {
+        const rawUrl = e.target?.result as string;
+        try {
+          const prep = await preprocessCardImage(rawUrl, {
+            autoOptimize: autoEnhance,
+            brightness,
+            contrast,
+            sharpness,
+          });
+          setPreprocessStats(prep.stats);
+          resolve(prep.processedBase64);
+        } catch {
+          resolve(rawUrl);
+        }
       };
       reader.readAsDataURL(file);
     });
   };
 
-  const handleCapturePhoto = () => {
+  const handleCapturePhoto = async () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
     const canvas = document.createElement('canvas');
@@ -145,12 +133,20 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      if (autoEnhance) {
-        ctx.filter = `contrast(1.08) brightness(${brightness / 100})`;
-      }
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-      setFrontImage(dataUrl);
+      const rawDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      try {
+        const prep = await preprocessCardImage(rawDataUrl, {
+          autoOptimize: autoEnhance,
+          brightness,
+          contrast,
+          sharpness,
+        });
+        setPreprocessStats(prep.stats);
+        setFrontImage(prep.processedBase64);
+      } catch {
+        setFrontImage(rawDataUrl);
+      }
     }
   };
 
@@ -545,20 +541,113 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             </div>
           )}
 
-          {/* AI Preprocessing & Correction Tools */}
-          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs space-y-2.5">
+          {/* AI Preprocessing & Image Enhancement Tools */}
+          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-red-500" />
-                <span>AI自動前処理（背景除去・傾き補正）</span>
+                <span>AI画質自動補正・明暗コントラスト調整</span>
               </span>
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded">
-                有効
-              </span>
+              <button
+                type="button"
+                onClick={() => setAutoEnhance(!autoEnhance)}
+                className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                  autoEnhance
+                    ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-slate-100 dark:bg-slate-700 border-slate-300 text-slate-500'
+                }`}
+              >
+                {autoEnhance ? 'AI自動補正: ON' : 'AI自動補正: OFF'}
+              </button>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              机の映り込みや多少斜めの角度でも、AIがカード四隅を検出してまっすぐに補正・明度を最適化します。
-            </p>
+
+            {/* Live Stats Message */}
+            {preprocessStats ? (
+              <div className="p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 text-[11px] text-emerald-800 dark:text-emerald-200 font-semibold flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <span>{preprocessStats.message}</span>
+                </span>
+                <span className="text-[10px] opacity-75 font-mono">
+                  照度 {preprocessStats.originalLuminance}/255
+                </span>
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                撮影写真の明るさ・影・コントラストをAIが自動調整し、テキストと状態判定の識別精度を向上させます。
+              </p>
+            )}
+
+            {/* Manual Sliders Expand Button */}
+            <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+              <button
+                type="button"
+                onClick={() => setShowManualSliders(!showManualSliders)}
+                className="text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-red-600 flex items-center gap-1 cursor-pointer"
+              >
+                <Sliders className="w-3 h-3 text-slate-400" />
+                <span>{showManualSliders ? '手動調整スライダーを閉じる' : '明るさ・コントラストを手動で微調整'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsConditionGuideOpen(true)}
+                className="text-xs font-bold text-red-600 dark:text-rose-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>状態判定ガイド</span>
+              </button>
+            </div>
+
+            {/* Manual Adjustment Sliders */}
+            {showManualSliders && (
+              <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3 pt-3 animate-fadeIn">
+                <div>
+                  <div className="flex justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    <span>明るさ (Brightness)</span>
+                    <span className="font-mono text-red-600">{brightness}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="60"
+                    max="140"
+                    value={brightness}
+                    onChange={(e) => setBrightness(Number(e.target.value))}
+                    className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-600"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    <span>コントラスト (Contrast)</span>
+                    <span className="font-mono text-red-600">{contrast}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="60"
+                    max="140"
+                    value={contrast}
+                    onChange={(e) => setContrast(Number(e.target.value))}
+                    className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-600"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    <span>輪郭強調 (Sharpening)</span>
+                    <span className="font-mono text-red-600">{sharpness}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="80"
+                    value={sharpness}
+                    onChange={(e) => setSharpness(Number(e.target.value))}
+                    className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-600"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
         </div>
@@ -615,6 +704,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         </div>
 
       </div>
+
+      {/* Condition Grading Guide Modal */}
+      <ConditionGuideModal
+        isOpen={isConditionGuideOpen}
+        onClose={() => setIsConditionGuideOpen(false)}
+      />
     </div>
   );
 };

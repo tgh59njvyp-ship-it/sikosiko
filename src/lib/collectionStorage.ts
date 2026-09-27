@@ -490,3 +490,95 @@ export function getCollectionAnalytics(binders: CollectionBinder[]): CollectionA
     binderCount: binders.length,
   };
 }
+
+/**
+ * Export collection cards to CSV string
+ */
+export function exportCollectionToCSV(
+  binders: CollectionBinder[],
+  activeBinderId?: string,
+  exportScope: 'active' | 'all' = 'active'
+): { csvString: string; cardCount: number; totalValue: number } {
+  const headers = [
+    'バインダー名',
+    'ページ',
+    'スロット',
+    'カード名',
+    'カード番号',
+    'レアリティ',
+    '拡張パック/収録セット',
+    'シリーズ',
+    '状態ランク',
+    '推定相場価格(円)',
+    '追加日時',
+    'メモ',
+  ];
+
+  const targetBinders =
+    exportScope === 'active' && activeBinderId
+      ? binders.filter((b) => b.id === activeBinderId)
+      : binders;
+
+  const rows: string[][] = [headers];
+  let cardCount = 0;
+  let totalValue = 0;
+
+  targetBinders.forEach((binder) => {
+    const cards = binder.cards || [];
+    cards.forEach((card) => {
+      cardCount++;
+      totalValue += card.estimatedPrice || 0;
+      const addedDate = card.addedAt ? new Date(card.addedAt).toLocaleString('ja-JP') : '';
+
+      rows.push([
+        binder.title || '無題バインダー',
+        `Page ${card.pageIndex + 1}`,
+        `Slot ${card.slotIndex + 1}`,
+        card.cardName || '',
+        card.cardNumber || '',
+        card.rarity || '',
+        card.expansionSet || '',
+        card.series || '',
+        card.conditionGrade ? `${card.conditionGrade}ランク` : '',
+        card.estimatedPrice ? card.estimatedPrice.toString() : '0',
+        addedDate,
+        card.notes || '',
+      ]);
+    });
+  });
+
+  const csvContent = rows
+    .map((row) =>
+      row
+        .map((cell) => {
+          const escaped = String(cell).replace(/"/g, '""');
+          return `"${escaped}"`;
+        })
+        .join(',')
+    )
+    .join('\r\n');
+
+  // Add UTF-8 BOM for Windows Excel compatibility
+  return {
+    csvString: '\uFEFF' + csvContent,
+    cardCount,
+    totalValue,
+  };
+}
+
+/**
+ * Trigger browser file download for generated CSV
+ */
+export function downloadCSVFile(csvContent: string, filename: string) {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+

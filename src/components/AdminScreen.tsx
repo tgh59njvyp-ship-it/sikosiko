@@ -12,8 +12,20 @@ import {
   Cpu,
   CheckCircle2,
   RefreshCw,
+  AlertTriangle,
+  MessageSquare,
 } from 'lucide-react';
 import { fetchAdminMetrics } from '../lib/api';
+
+const getStoredReports = (): any[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('card_scanner_appraisal_reports_v2');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
 
 interface AdminScreenProps {
   onBack: () => void;
@@ -22,12 +34,14 @@ interface AdminScreenProps {
 export const AdminScreen: React.FC<AdminScreenProps> = ({ onBack }) => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [reports, setReports] = useState<any[]>([]);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const res = await fetchAdminMetrics();
       setData(res);
+      setReports(getStoredReports());
     } catch (err) {
       console.error(err);
     } finally {
@@ -276,6 +290,60 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onBack }) => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* User Quality Feedback Reports Log */}
+      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <span>査定誤認識・品質報告ログ ({reports.length}件)</span>
+          </h3>
+          <span className="text-xs text-slate-400">
+            ユーザーフィードバック収集結果
+          </span>
+        </div>
+
+        {reports.length > 0 ? (
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {reports.map((rep: any) => (
+              <div
+                key={rep.id}
+                className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 space-y-2 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      対象: {rep.cardName}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      ({rep.cardNumber} / {rep.rarity})
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {rep.submittedAt ? new Date(rep.submittedAt).toLocaleString('ja-JP') : ''}
+                  </span>
+                </div>
+
+                {rep.correctInfo && (
+                  <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 p-2 rounded-xl border border-amber-200 dark:border-amber-900/50">
+                    💡 修正候補情報: {rep.correctInfo}
+                  </div>
+                )}
+
+                {rep.userComment && (
+                  <p className="text-slate-600 dark:text-slate-300 italic text-[11px]">
+                    &ldquo;{rep.userComment}&rdquo;
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-8 text-center bg-slate-50 dark:bg-slate-700/30 rounded-2xl text-xs text-slate-400">
+            現在、誤認識の報告はありません（良好なAI認識率）
+          </div>
+        )}
       </div>
 
     </div>

@@ -6,6 +6,7 @@ import {
 } from './clientCatalog';
 import { getStoredApiKey } from './geminiKey';
 import { detectAndCropCard } from './cardCropper';
+import { preprocessCardImage } from './imagePreprocessor';
 import {
   auth,
   saveAppraisalToFirestore,

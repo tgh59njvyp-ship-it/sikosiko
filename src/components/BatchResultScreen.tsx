@@ -9,8 +9,10 @@ import {
   ShieldCheck,
   BookOpen,
   CheckCircle2,
+  HelpCircle,
 } from 'lucide-react';
 import { AppraisalRecord } from '../types/card';
+import { ConditionGuideModal } from './ConditionGuideModal';
 import {
   addBatchCardsToBinder,
   getActiveBinderId,
@@ -34,6 +36,7 @@ export const BatchResultScreen: React.FC<BatchResultScreenProps> = ({
   onNavigateCollection,
 }) => {
   const [addedSuccessCount, setAddedSuccessCount] = useState<number | null>(null);
+  const [isConditionGuideOpen, setIsConditionGuideOpen] = useState(false);
 
   const handleAddAllToBinder = () => {
     const binders = getStoredBinders();
@@ -63,6 +66,14 @@ export const BatchResultScreen: React.FC<BatchResultScreenProps> = ({
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => setIsConditionGuideOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+          >
+            <HelpCircle className="w-4 h-4 text-amber-500 shrink-0" />
+            <span>状態判定ガイド</span>
+          </button>
+
           <button
             onClick={handleAddAllToBinder}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-red-500/25 active:scale-95 transition-all cursor-pointer"
@@ -184,6 +195,12 @@ export const BatchResultScreen: React.FC<BatchResultScreenProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Condition Grading Guide Modal */}
+      <ConditionGuideModal
+        isOpen={isConditionGuideOpen}
+        onClose={() => setIsConditionGuideOpen(false)}
+      />
 
     </div>
   );
